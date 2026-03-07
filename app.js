@@ -201,7 +201,7 @@ function renderWaypoints() {
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'wp-addr-input' + (wp.address ? ' filled' : '');
-    input.placeholder = '주소 직접 입력…';
+    input.placeholder = '주소 입력';
     input.value = wp.address || '';
     input.dataset.idx = i;
 
@@ -220,37 +220,41 @@ function renderWaypoints() {
     });
 
     // blur: REST API로 자동 좌표 조회
-    input.addEventListener('blur', async () => {
-      const val = input.value.trim();
-      if (!val) {
-        S.waypoints[i] = { ...S.waypoints[i], address: '', x: '', y: '' };
-        input.classList.remove('filled', 'error', 'geocoding');
-        return;
-      }
-      if (val === S.waypoints[i].address && S.waypoints[i].x) return; // 변화없음
-      S.waypoints[i].address = val;
-      input.classList.add('geocoding');
-      input.classList.remove('error');
-      try {
-        const result = await geocodeByRest(val);
-        if (result) {
-          S.waypoints[i].x = result.x;
-          S.waypoints[i].y = result.y;
-          input.classList.add('filled');
-          input.classList.remove('error');
-        } else {
+    input.addEventListener('blur', () => {
+      // 한글 조합이 끝난 최종 value를 얻기 위해 약간의 지연
+      setTimeout(async () => {
+        const val = input.value.trim();
+        if (!val) {
+          S.waypoints[i] = { ...S.waypoints[i], address: '', x: '', y: '' };
+          input.classList.remove('filled', 'error', 'geocoding');
+          return;
+        }
+        if (val === S.waypoints[i].address && S.waypoints[i].x) return; // 변화없음
+
+        S.waypoints[i].address = val;
+        input.classList.add('geocoding');
+        input.classList.remove('error');
+        try {
+          const result = await geocodeByRest(val);
+          if (result) {
+            S.waypoints[i].x = result.x;
+            S.waypoints[i].y = result.y;
+            input.classList.add('filled');
+            input.classList.remove('error');
+          } else {
+            S.waypoints[i].x = '';
+            S.waypoints[i].y = '';
+            input.classList.add('error');
+            toast('주소를 찾지 못했습니다. 🔍 버튼으로 직접 검색해보세요', 3000);
+          }
+        } catch {
           S.waypoints[i].x = '';
           S.waypoints[i].y = '';
           input.classList.add('error');
-          toast('주소를 찾지 못했습니다. 🔍 버튼으로 직접 검색해보세요', 3000);
+        } finally {
+          input.classList.remove('geocoding');
         }
-      } catch {
-        S.waypoints[i].x = '';
-        S.waypoints[i].y = '';
-        input.classList.add('error');
-      } finally {
-        input.classList.remove('geocoding');
-      }
+      }, 50);
     });
 
     // 🔍 Daum Postcode 보조 검색 버튼
@@ -299,7 +303,7 @@ function moveWp(i, dir) {
 }
 
 function resetWaypoints() {
-  S.waypoints = Array.from({ length: 3 }, createWaypoint); // 기본 3개
+  S.waypoints = Array.from({ length: 5 }, createWaypoint); // 기본 5개
   renderWaypoints();
   clearResults();
 }
