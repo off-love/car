@@ -448,7 +448,7 @@ table .col-action {
 
 #segments-table th:first-child {
   border-radius: 6px 0 0 6px;
-  padding-left: 12px;
+  padding-left: 4px;
 }
 
 #segments-table th:last-child {
@@ -464,7 +464,7 @@ table .col-action {
 }
 
 #segments-table td:first-child {
-  padding-left: 12px;
+  padding-left: 4px;
 }
 
 #segments-table td:last-child {
@@ -584,7 +584,7 @@ table .col-action {
 #right-scroll {
   overflow-y: auto;
   flex: 1;
-  padding: 14px;
+  padding: 14px 14px 14px 6px;
   display: flex;
   flex-direction: column;
   gap: 12px;

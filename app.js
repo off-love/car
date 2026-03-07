@@ -203,6 +203,7 @@ function renderWaypoints() {
     input.className = 'wp-addr-input' + (wp.address ? ' filled' : '');
     input.placeholder = '주소 입력';
     input.value = wp.address || '';
+    input.title = wp.address || ''; // 마우스 오버 시 전체 주소 표시
     input.dataset.idx = i;
 
     // 엔터키 : 포커스 해제 (입력 완료 처리)
@@ -226,6 +227,7 @@ function renderWaypoints() {
         if (val === S.waypoints[i].address && S.waypoints[i].x) return; // 변화없음
 
         S.waypoints[i].address = val;
+        input.title = val; // 툴팁 업데이트
         input.classList.add('geocoding');
         input.classList.remove('error');
         try {
