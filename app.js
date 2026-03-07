@@ -213,7 +213,10 @@ function renderWaypoints() {
         if (inputs[i + 1]) inputs[i + 1].focus();
         else document.getElementById('btn-calc').focus();
       }
-      if (e.key === 'Enter') input.blur();
+      if (e.key === 'Enter') {
+        if (e.isComposing) return; // 한글 끝 글자 중복 입력 방지
+        input.blur();
+      }
     });
 
     // blur: REST API로 자동 좌표 조회
@@ -746,6 +749,8 @@ function updateFixedStops() {
 async function geocodeByRest(address) {
   const restKey = S.settings.restKey || KAKAO_REST_KEY;
   if (!restKey) return null;
+
+  // 1순위: 주소로 검색 (address.json)
   try {
     const resp = await fetch(
       `https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(address)}`,
@@ -753,7 +758,18 @@ async function geocodeByRest(address) {
     );
     const json = await resp.json();
     if (json.documents?.[0]) return { x: json.documents[0].x, y: json.documents[0].y };
-  } catch (e) { console.error('geocoding failed:', e); }
+  } catch (e) { console.error('Address geocoding failed:', e); }
+
+  // 2순위: 검색결과가 없다면 장소명(키워드)으로 검색 (keyword.json)
+  try {
+    const resp2 = await fetch(
+      `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(address)}`,
+      { headers: { Authorization: `KakaoAK ${restKey}` } }
+    );
+    const json2 = await resp2.json();
+    if (json2.documents?.[0]) return { x: json2.documents[0].x, y: json2.documents[0].y };
+  } catch (e) { console.error('Keyword geocoding failed:', e); }
+
   return null;
 }
 

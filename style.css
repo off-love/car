@@ -320,17 +320,17 @@ table .col-action {
 .wp-btns {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
 .wp-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--white);
-  font-size: 12px;
+  font-size: 10px;
   color: var(--text-sub);
   display: flex;
   align-items: center;
@@ -480,6 +480,7 @@ table .col-action {
   color: var(--navy);
   border-top: 2px solid var(--teal);
   border-bottom: none;
+  white-space: nowrap;
 }
 
 .copy-seg-btn {
