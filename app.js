@@ -205,14 +205,8 @@ function renderWaypoints() {
     input.value = wp.address || '';
     input.dataset.idx = i;
 
-    // Tab: 다음 경유지로 이동
+    // 엔터키 : 포커스 해제 (입력 완료 처리)
     input.addEventListener('keydown', e => {
-      if (e.key === 'Tab' && !e.shiftKey) {
-        e.preventDefault();
-        const inputs = document.querySelectorAll('.wp-addr-input');
-        if (inputs[i + 1]) inputs[i + 1].focus();
-        else document.getElementById('btn-calc').focus();
-      }
       if (e.key === 'Enter') {
         if (e.isComposing) return; // 한글 끝 글자 중복 입력 방지
         input.blur();
@@ -262,6 +256,7 @@ function renderWaypoints() {
     searchBtn.className = 'wp-search-btn';
     searchBtn.title = '주소 검색 (팝업)';
     searchBtn.textContent = '🔍';
+    searchBtn.tabIndex = -1; // 탭 이동 제외
     searchBtn.addEventListener('click', () => openAddressSearch(i));
 
     // Action buttons
@@ -270,6 +265,7 @@ function renderWaypoints() {
     const mkBtn = (emoji, cls, title, fn) => {
       const b = document.createElement('button');
       b.className = `wp-btn ${cls}`; b.title = title; b.textContent = emoji;
+      b.tabIndex = -1; // 탭 이동 제외
       b.addEventListener('click', fn); return b;
     };
     btns.append(
