@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>차량운행일지</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <!-- ====== HEADER ====== -->
+  <header id="app-header">
+    <h1><span class="car-icon">🚗</span> 차량운행일지</h1>
+    <button id="btn-settings">⚙️ 설정</button>
+  </header>
+
+  <!-- ====== MAIN GRID ====== -->
+  <div id="main-grid">
+
+    <!-- LEFT PANEL: 경로 입력 -->
+    <aside id="left-panel">
+      <div id="left-scroll">
+
+        <!-- 경로 입력 카드 -->
+        <div class="card" id="route-card">
+          <div class="card-title">🗺️ 경로 입력</div>
+
+          <!-- 출발지 (고정) -->
+          <div class="fixed-stop" id="origin-stop">
+            <div class="stop-dot origin-dot"></div>
+            <div class="stop-info">
+              <div class="stop-role">출발</div>
+              <div class="stop-addr" id="origin-addr-text">사무실 주소를 설정해주세요</div>
+            </div>
+          </div>
+
+          <!-- 경유지 목록 -->
+          <ul id="waypoints-list"></ul>
+
+          <!-- 경유지 추가 버튼 -->
+          <button class="btn-add-wp" id="btn-add-wp">＋ 추가</button>
+
+          <!-- 도착지 (고정) -->
+          <div class="fixed-stop" id="dest-stop">
+            <div class="stop-dot dest-dot"></div>
+            <div class="stop-info">
+              <div class="stop-role">도착</div>
+              <div class="stop-addr" id="dest-addr-text">사무실 주소를 설정해주세요</div>
+            </div>
+          </div>
+
+          <!-- 액션 버튼 -->
+          <div class="route-actions">
+            <button class="btn-primary" id="btn-calc">🔍 경로 계산</button>
+            <button class="btn-ghost" id="btn-reset">초기화</button>
+          </div>
+        </div>
+
+      </div><!-- /left-scroll -->
+    </aside>
+
+    <!-- CENTER PANEL: 지도 -->
+    <div id="map-panel">
+      <div id="map-container"></div>
+      <div id="map-placeholder">
+        <div class="placeholder-icon">🗺️</div>
+        <p>경로를 입력하고 계산하면<br>지도가 표시됩니다.</p>
+      </div>
+      <div id="map-loading">
+        <div class="spinner"></div>
+        <span>경로 계산 중…</span>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL: 구간별 거리 (항상 렌더링되나 초기엔 내용없음) -->
+    <aside id="right-panel">
+      <div id="right-scroll">
+        <!-- 초기 빈 상태 표시 -->
+        <div id="results-placeholder"
+          style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text-sub); text-align:center; padding:20px; gap:12px;">
+          <div style="font-size:40px; opacity:0.3;">📊</div>
+          <p>경로 계산 결과가<br>여기에 표시됩니다.</p>
+        </div>
+
+        <!-- 계산된 결과 카드 -->
+        <div id="results-card" style="display:none">
+          <div class="results-header">
+            <span class="results-title">📊 구간별 정보</span>
+            <span id="total-km" class="results-total">—</span>
+            <button class="btn-primary" id="btn-save" style="display:none">💾 저장</button>
+          </div>
+          <table id="segments-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>출발지</th>
+                <th>도착지</th>
+                <th>거리</th>
+                <th>복사</th>
+              </tr>
+            </thead>
+            <tbody id="segments-body"></tbody>
+            <tfoot>
+              <tr class="total-row">
+                <td colspan="3">합계</td>
+                <td id="total-km-foot">—</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </aside>
+
+  </div><!-- /main-grid -->
+
+  <!-- ====== TOAST ====== -->
+  <div id="toast"></div>
+
+  <!-- ====== MODAL: 설정 (기본정보 제외) ====== -->
+  <div class="modal-backdrop" id="modal-settings">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>⚙️ 설정</h2>
+        <button class="modal-close" data-close="modal-settings">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-section">
+          <div class="setting-title">🏢 사무실 기본 주소</div>
+          <div class="setting-row">
+            <input type="text" id="set-office-addr" class="setting-input" placeholder="주소 검색 클릭" readonly>
+            <button class="btn-search-sm" id="btn-search-office">검색</button>
+          </div>
+          <input type="hidden" id="set-office-x">
+          <input type="hidden" id="set-office-y">
+          <div class="toggle-row" style="margin-top:10px;">
+            <span>출발·도착지 사무실로 자동 고정</span>
+            <label class="toggle">
+              <input type="checkbox" id="set-fix-office" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="setting-section">
+          <div class="setting-title">🌏 기본 지역 필터</div>
+          <div class="setting-desc">주소 검색 시 기본으로 적용할 지역을 선택하세요. 동일한 지번이 여러 지역에 있을 때 유용합니다.</div>
+          <select id="set-default-region" class="setting-input">
+            <option value="">전국</option>
+            <option value="서울">서울</option>
+            <option value="경기">경기</option>
+            <option value="인천">인천</option>
+            <option value="부산">부산</option>
+            <option value="대구">대구</option>
+            <option value="대전">대전</option>
+            <option value="광주">광주</option>
+            <option value="울산">울산</option>
+            <option value="세종">세종</option>
+            <option value="강원">강원</option>
+            <option value="충북">충청북도</option>
+            <option value="충남">충청남도</option>
+            <option value="전북">전라북도</option>
+            <option value="전남">전라남도</option>
+            <option value="경북">경상북도</option>
+            <option value="경남">경상남도</option>
+            <option value="제주">제주</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" id="btn-save-settings">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== MODAL: 주소 검색 (Daum Postcode embed) ====== -->
+  <div class="modal-backdrop" id="modal-postcode">
+    <div class="modal modal-postcode">
+      <div class="modal-header">
+        <h2>🔍 주소 검색</h2>
+        <button class="modal-close" data-close="modal-postcode">✕</button>
+      </div>
+      <div id="postcode-wrap"></div>
+    </div>
+  </div>
+
+  <!-- ====== MODAL: 동일 지번 중복 선택 ====== -->
+  <div class="modal-backdrop" id="modal-ambig">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>⚠️ 주소 확인</h2>
+        <button class="modal-close" data-close="modal-ambig">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="ambig-desc">동일한 주소가 여러 지역에 있습니다.<br>정확한 지역을 선택해 주세요.</p>
+        <ul id="ambig-list" class="ambig-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
