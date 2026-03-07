@@ -446,8 +446,21 @@ async function calcRoute() {
     allPoints = [...filledWps];
   }
 
-  const missingCoords = filledWps.some(p => !p.x || !p.y);
-  if (missingCoords) { toast('좌표를 찾지 못한 경유지가 있습니다. 다시 입력해주세요'); return; }
+  // 에러 발생한 첫 번째 경유지 찾기
+  const errorIndex = filledWps.findIndex(p => !p.x || !p.y);
+  if (errorIndex !== -1) {
+    const errorWp = filledWps[errorIndex];
+    const inputs = document.querySelectorAll('.wp-addr-input');
+    // 실제 전체 waypoints 배열에서의 인덱스를 찾아야 함 (filledWps의 인덱스가 아님)
+    const realIdx = S.waypoints.findIndex(p => p.id === errorWp.id);
+
+    if (inputs[realIdx]) {
+      inputs[realIdx].classList.add('error');
+      inputs[realIdx].focus();
+    }
+    toast(`'${errorWp.address}'의 좌표를 찾지 못했습니다. 목록에서 확인해주세요.`, 4000);
+    return;
+  }
 
   const loading = document.getElementById('map-loading');
   loading.style.display = 'flex';
