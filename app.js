@@ -284,6 +284,10 @@ function renderWaypoints() {
 }
 
 function addWp() {
+  if (S.waypoints.length >= 10) {
+    toast('경유지는 최대 10개까지 추가할 수 있습니다.');
+    return;
+  }
   S.waypoints.push(createWaypoint());
   renderWaypoints();
 }
