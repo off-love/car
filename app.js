@@ -824,6 +824,7 @@ document.getElementById('btn-search-office').addEventListener('click', async () 
 // EVENT LISTENERS
 // ============================================================
 document.getElementById('btn-settings').addEventListener('click', openSettings);
+document.getElementById('btn-help').addEventListener('click', () => openModal('modal-help'));
 document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
 document.getElementById('btn-add-wp').addEventListener('click', addWp);
 document.getElementById('btn-reset').addEventListener('click', () => {
@@ -845,6 +846,21 @@ document.getElementById('btn-reset-settings').addEventListener('click', () => {
     toast('설정이 초기화되었습니다');
   }
 });
+
+// 모달 외부 클릭 및 닫기 버튼 범용 처리 (동적 추가 대응)
+document.addEventListener('click', e => {
+  const closeBtn = e.target.closest('.modal-close');
+  if (closeBtn && closeBtn.dataset.close) {
+    closeModal(closeBtn.dataset.close);
+    return;
+  }
+  const modalBtn = e.target.closest('[data-close]');
+  if (modalBtn && modalBtn.classList.contains('btn-primary') && modalBtn.dataset.close === 'modal-help') {
+    closeModal('modal-help');
+    return;
+  }
+});
+
 
 // ============================================================
 // INIT

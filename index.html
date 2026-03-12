@@ -13,7 +13,10 @@
 
   <header id="app-header">
     <h1><span class="car-icon">🚗</span> 차량운행일지</h1>
-    <button id="btn-settings">⚙️ 설정</button>
+    <div class="header-btns">
+      <button id="btn-help" class="btn-header-ghost">❓ 도움말</button>
+      <button id="btn-settings" class="btn-header">⚙️ 설정</button>
+    </div>
   </header>
 
   <!-- ====== MAIN GRID ====== -->
@@ -199,6 +202,36 @@
       <div class="modal-body">
         <p class="ambig-desc">동일한 주소가 여러 지역에 있습니다.<br>정확한 지역을 선택해 주세요.</p>
         <ul id="ambig-list" class="ambig-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== MODAL: 도움말 ====== -->
+  <div class="modal-backdrop" id="modal-help">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>❓ 도움말 (사용 방법)</h2>
+        <button class="modal-close" data-close="modal-help">✕</button>
+      </div>
+      <div class="modal-body" style="line-height: 1.6;">
+        <div style="margin-bottom: 16px;">
+          <h3 style="font-size: 15px; color: var(--navy); margin-bottom: 8px;">1. 기초 설정</h3>
+          <p style="font-size: 13.5px;">상단 <strong>[설정]</strong>에서 사무실 주소를 입력하세요. '자동 고정'을 켜면 출발·도착지가 항상 사무실로 고정됩니다.</p>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <h3 style="font-size: 15px; color: var(--navy); margin-bottom: 8px;">2. 경로 입력 및 계산</h3>
+          <p style="font-size: 13.5px;">왼쪽 패널에 방문할 곳을 입력하고 <strong>[경로 계산]</strong>을 누르세요. 지도에 경로가 표시되고 구간별 거리가 계산됩니다.</p>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <h3 style="font-size: 15px; color: var(--navy); margin-bottom: 8px;">3. 결과 활용</h3>
+          <p style="font-size: 13.5px;">우측 패널의 <strong>[📋]</strong> 버튼을 눌러 주소를 복사하거나, <strong>[저장]</strong>을 눌러 운행 이력에 기록할 수 있습니다.</p>
+        </div>
+        <div style="background: var(--teal-light); padding: 10px; border-radius: 8px; font-size: 12.5px; color: var(--teal);">
+          💡 <strong>팁:</strong> 지번/도로명 주소 뿐만 아니라 '강남역' 같은 키워드로도 검색이 가능합니다.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" data-close="modal-help">확인</button>
       </div>
     </div>
   </div>

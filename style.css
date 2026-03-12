@@ -75,7 +75,13 @@ textarea {
   font-size: 20px;
 }
 
-#btn-settings {
+.header-btns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-header {
   background: rgba(255, 255, 255, .15);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, .3);
@@ -86,8 +92,24 @@ textarea {
   transition: background .2s;
 }
 
-#btn-settings:hover {
+.btn-header:hover {
   background: rgba(255, 255, 255, .25);
+}
+
+.btn-header-ghost {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background .2s;
+}
+
+.btn-header-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 
 /* ─── MAIN GRID ─── */
