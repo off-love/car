@@ -831,6 +831,20 @@ document.getElementById('btn-reset').addEventListener('click', () => {
 });
 document.getElementById('btn-calc').addEventListener('click', calcRoute);
 document.getElementById('btn-save').addEventListener('click', saveHistory);
+document.getElementById('btn-reset-settings').addEventListener('click', () => {
+  if (confirm('모든 설정을 초기화하시겠습니까? (사무실 주소 및 기본 지역 필터 등)')) {
+    localStorage.removeItem('drvlog_settings');
+    S.settings = {
+      jsKey: KAKAO_JS_KEY, restKey: KAKAO_REST_KEY,
+      officeAddr: '', officeX: '', officeY: '',
+      fixOffice: true, driver: '', vehicle: '',
+      defaultRegion: ''
+    };
+    openSettings(); // UI 갱신을 위해 다시 열기
+    updateFixedStops();
+    toast('설정이 초기화되었습니다');
+  }
+});
 
 // ============================================================
 // INIT

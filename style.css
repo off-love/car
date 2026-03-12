@@ -76,18 +76,22 @@ textarea {
 }
 
 #btn-settings {
-  background: rgba(255, 255, 255, .15);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, .3);
-  border-radius: 8px;
-  padding: 7px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  transition: background .2s;
+  background: transparent;
+  color: var(--navy);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 14px;
+  transition: all .2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #btn-settings:hover {
-  background: rgba(255, 255, 255, .25);
+  background: var(--blue-light);
+  border-color: var(--blue);
+  color: var(--blue);
 }
 
 /* ─── MAIN GRID ─── */
@@ -168,6 +172,7 @@ table .col-action {
   margin-bottom: 14px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
 }
 
@@ -803,15 +808,13 @@ table .col-action {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 10px;
-  font-size: 13px;
 }
 
 .toggle {
   position: relative;
   display: inline-block;
   width: 40px;
-  height: 22px;
+  height: 20px;
 }
 
 .toggle input {
@@ -822,31 +825,31 @@ table .col-action {
 
 .toggle-slider {
   position: absolute;
-  inset: 0;
-  background: var(--border);
-  border-radius: 22px;
   cursor: pointer;
-  transition: background .25s;
+  inset: 0;
+  background-color: #ccc;
+  transition: .3s;
+  border-radius: 20px;
 }
 
-.toggle-slider::before {
-  content: '';
+.toggle-slider:before {
   position: absolute;
-  width: 16px;
-  height: 16px;
+  content: "";
+  height: 14px;
+  width: 14px;
   left: 3px;
   bottom: 3px;
-  background: #fff;
+  background-color: white;
+  transition: .3s;
   border-radius: 50%;
-  transition: transform .25s;
 }
 
-.toggle input:checked+.toggle-slider {
-  background: var(--teal);
+input:checked+.toggle-slider {
+  background-color: var(--teal);
 }
 
-.toggle input:checked+.toggle-slider::before {
-  transform: translateX(18px);
+input:checked+.toggle-slider:before {
+  transform: translateX(20px);
 }
 
 .btn-test {
