@@ -13,6 +13,7 @@
 
   <header id="app-header">
     <h1><span class="car-icon">🚗</span> 차량운행일지</h1>
+    <button id="btn-settings">⚙️ 설정</button>
   </header>
 
   <!-- ====== MAIN GRID ====== -->
@@ -24,10 +25,7 @@
 
         <!-- 경로 입력 카드 -->
         <div class="card" id="route-card">
-          <div class="card-title">
-            <span>🗺️ 경로 입력</span>
-            <button id="btn-settings" title="설정">⚙️</button>
-          </div>
+          <div class="card-title">🗺️ 경로 입력</div>
 
           <!-- 출발지 (고정) -->
           <div class="fixed-stop" id="origin-stop">
@@ -142,7 +140,7 @@
 
           <div class="setting-row">
             <input type="text" id="set-office-addr" class="setting-input" placeholder="주소 검색 클릭" readonly>
-            <button class="btn-search-sm" id="btn-search-office">검색</button>
+            <button class="btn-search-sm" id="btn-search-office">주소 검색</button>
           </div>
           <input type="hidden" id="set-office-x">
           <input type="hidden" id="set-office-y">

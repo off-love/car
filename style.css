@@ -76,22 +76,18 @@ textarea {
 }
 
 #btn-settings {
-  background: transparent;
-  color: var(--navy);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 14px;
-  transition: all .2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: rgba(255, 255, 255, .15);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background .2s;
 }
 
 #btn-settings:hover {
-  background: var(--blue-light);
-  border-color: var(--blue);
-  color: var(--blue);
+  background: rgba(255, 255, 255, .25);
 }
 
 /* ─── MAIN GRID ─── */
@@ -172,7 +168,6 @@ table .col-action {
   margin-bottom: 14px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
 }
 
