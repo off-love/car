@@ -17,16 +17,15 @@ const S = {
     defaultRegion: '' // 기본 지역 필터
   },
   waypoints: [], // [{id,address,x,y,region}]
-  segments: [],  // [{from,to,fromAddr,toAddr,distance}]
+  segments: [],  // [{from,to,fromAddr,toAddr,distance,duration}]
   totalDist: 0,
   mapInst: null,
   markers: [],
   polylines: [],
   favorites: [],
-  history: [],
+  savedRoutes: [], // 저장된 경로 (최대 3건)
   pendingWpIdx: null,    // 주소 검색 대상 waypoint index
   pendingPostcodeData: null, // 중복 주소 확인 대기 데이터
-  historyOpen: false,
   kakaoLoaded: false
 };
 
@@ -52,7 +51,7 @@ function loadAll() {
   // API 키는 코드에 고정 — 저장값 무시
   S.settings.jsKey = KAKAO_JS_KEY;
   S.settings.restKey = KAKAO_REST_KEY;
-  S.history = load('drvlog_history') || [];
+  S.savedRoutes = load('drvlog_saved_routes') || [];
 }
 
 // ============================================================
@@ -553,7 +552,8 @@ function buildSegments(points, route) {
   return route.sections.map((sec, i) => ({
     from: points[i]?.alias || points[i]?.address || '',
     to: points[i + 1]?.alias || points[i + 1]?.address || '',
-    distance: Math.round(sec.distance / 100) / 10 // m → km (1 decimal)
+    distance: Math.round(sec.distance / 100) / 10, // m → km (1 decimal)
+    duration: sec.duration || 0 // 초 단위
   }));
 }
 
@@ -572,16 +572,26 @@ function extractCoords(route) {
 // ============================================================
 // RESULTS
 // ============================================================
+function formatDuration(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.ceil((seconds % 3600) / 60);
+  if (h > 0) return `${h}시간 ${m}분`;
+  return `${m}분`;
+}
+
 function renderResults() {
   const tbody = document.getElementById('segments-body');
   tbody.innerHTML = '';
+  let totalDuration = 0;
   S.segments.forEach((seg, i) => {
+    totalDuration += seg.duration || 0;
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${i + 1}</td>
       <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${seg.from}">${seg.from}</td>
       <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${seg.to}">${seg.to}</td>
       <td><strong>${seg.distance.toFixed(1)}</strong></td>
+      <td>${formatDuration(seg.duration || 0)}</td>
       <td><button class="copy-seg-btn" data-i="${i}" title="도착지명 복사">📋</button></td>
     `;
     tbody.appendChild(tr);
@@ -590,6 +600,8 @@ function renderResults() {
   document.getElementById('total-km').textContent = totalText;
   const foot = document.getElementById('total-km-foot');
   if (foot) foot.textContent = totalText;
+  const footDur = document.getElementById('total-dur-foot');
+  if (footDur) footDur.textContent = formatDuration(totalDuration);
 
   document.getElementById('results-placeholder').style.display = 'none';
   document.getElementById('results-card').style.display = 'block';
@@ -649,66 +661,97 @@ document.getElementById('segments-body').addEventListener('click', e => {
 
 
 // ============================================================
-// HISTORY
+// SAVED ROUTES (최대 3건)
 // ============================================================
-function saveHistory() {
+function saveRoute() {
   if (!S.segments.length) { toast('먼저 경로를 계산해주세요'); return; }
+
+  // 경유지 요약 라벨 생성 (첫 출발지 → 마지막 도착지)
+  const firstFrom = S.segments[0]?.from || '?';
+  const lastTo = S.segments[S.segments.length - 1]?.to || '?';
+  const totalDuration = S.segments.reduce((sum, seg) => sum + (seg.duration || 0), 0);
+
   const record = {
     id: genId(),
     date: new Date().toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }),
+    label: `${firstFrom} → ${lastTo}`,
     totalDist: S.totalDist,
+    totalDuration,
     waypoints: S.waypoints.map(w => ({ ...w })),
-    segments: S.segments.map(s => ({ ...s }))
+    segments: S.segments.map(s => ({ ...s })),
+    fixOffice: S.settings.fixOffice,
+    officeAddr: S.settings.officeAddr,
+    officeX: S.settings.officeX,
+    officeY: S.settings.officeY
   };
-  S.history.unshift(record);
-  if (S.history.length > 20) S.history.pop();
-  save('drvlog_history', S.history);
-  renderHistory();
-  toast('운행일지가 저장되었습니다 💾');
+
+  S.savedRoutes.unshift(record);
+  // 최대 3건 유지
+  if (S.savedRoutes.length > 3) S.savedRoutes = S.savedRoutes.slice(0, 3);
+  save('drvlog_saved_routes', S.savedRoutes);
+  renderSavedRoutes();
+  toast('경로가 저장되었습니다 💾');
 }
 
-function renderHistory() {
-  const el = document.getElementById('history-list');
-  el.innerHTML = '';
-  if (!S.history.length) {
-    el.innerHTML = '<p class="empty-msg">저장된 이력이 없습니다.</p>';
+function renderSavedRoutes() {
+  const section = document.getElementById('saved-routes-section');
+  const list = document.getElementById('saved-routes-list');
+  const countEl = document.getElementById('saved-routes-count');
+
+  if (!S.savedRoutes.length) {
+    section.style.display = 'none';
     return;
   }
-  S.history.forEach((h, hi) => {
-    const div = document.createElement('div');
-    div.className = 'hist-item';
-    div.innerHTML = `
-      <div class="hist-date">${h.date || ''}</div>
-      <div class="hist-km">${h.totalDist?.toFixed(1)} km</div>
-      <div class="hist-btns">
-        <button class="hist-btn" data-hi="${hi}">불러오기</button>
-        <button class="hist-btn del" data-del="${hi}">삭제</button>
-      </div>
-    `;
-    el.appendChild(div);
-  });
 
-  el.querySelectorAll('.hist-btn:not(.del)').forEach(btn => {
-    btn.addEventListener('click', () => loadHistory(parseInt(btn.dataset.hi)));
-  });
-  el.querySelectorAll('.hist-btn.del').forEach(btn => {
-    btn.addEventListener('click', () => {
-      S.history.splice(parseInt(btn.dataset.del), 1);
-      save('drvlog_history', S.history);
-      renderHistory();
+  section.style.display = 'block';
+  countEl.textContent = `${S.savedRoutes.length}/3`;
+  list.innerHTML = '';
+
+  S.savedRoutes.forEach((route, idx) => {
+    const item = document.createElement('div');
+    item.className = 'saved-route-item';
+    item.innerHTML = `
+      <div class="saved-route-content">
+        <div class="saved-route-label" title="${route.label}">${route.label}</div>
+        <div class="saved-route-meta">
+          <span>${route.totalDist?.toFixed(1)} km</span>
+          <span>·</span>
+          <span>${formatDuration(route.totalDuration || 0)}</span>
+          <span>·</span>
+          <span>${route.date}</span>
+        </div>
+      </div>
+      <button class="saved-route-del" data-idx="${idx}" title="삭제">✕</button>
+    `;
+    // 카드 클릭 → 불러오기
+    item.querySelector('.saved-route-content').addEventListener('click', () => loadSavedRoute(idx));
+    // 삭제 버튼
+    item.querySelector('.saved-route-del').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteSavedRoute(idx);
     });
+    list.appendChild(item);
   });
 }
 
-function loadHistory(idx) {
-  const h = S.history[idx];
-  if (!h) return;
-  S.waypoints = h.waypoints.map(w => ({ ...w }));
-  S.segments = h.segments.map(s => ({ ...s }));
-  S.totalDist = h.totalDist;
+async function loadSavedRoute(idx) {
+  const route = S.savedRoutes[idx];
+  if (!route) return;
+
+  // 경유지 복원
+  S.waypoints = route.waypoints.map(w => ({ ...w }));
   renderWaypoints();
-  renderResults();
-  toast('이력을 불러왔습니다. 경로 계산 버튼으로 최신 경로를 확인하세요.');
+
+  // 자동 경로 계산 실행
+  toast('경로를 불러오는 중...', 1500);
+  await calcRoute();
+}
+
+function deleteSavedRoute(idx) {
+  S.savedRoutes.splice(idx, 1);
+  save('drvlog_saved_routes', S.savedRoutes);
+  renderSavedRoutes();
+  toast('저장된 경로가 삭제되었습니다');
 }
 
 // ============================================================
@@ -835,7 +878,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   if (confirm('경유지를 초기화하시겠습니까?')) resetWaypoints();
 });
 document.getElementById('btn-calc').addEventListener('click', calcRoute);
-document.getElementById('btn-save').addEventListener('click', saveHistory);
+document.getElementById('btn-save-route').addEventListener('click', saveRoute);
 document.getElementById('btn-reset-settings').addEventListener('click', () => {
   if (confirm('모든 설정을 초기화하시겠습니까? (사무실 주소 및 기본 지역 필터 등)')) {
     localStorage.removeItem('drvlog_settings');
@@ -872,6 +915,7 @@ document.addEventListener('click', e => {
 async function init() {
   loadAll();
   updateFixedStops();
+  renderSavedRoutes();
   resetWaypoints();
 
   // Load SDK

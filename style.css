@@ -71,6 +71,13 @@ textarea {
   gap: 8px;
 }
 
+.header-sub {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: .65;
+  letter-spacing: 0;
+}
+
 .car-icon {
   font-size: 20px;
 }
@@ -1122,4 +1129,130 @@ table td {
   #map-panel {
     height: 300px;
   }
+}
+
+/* ─── SAVED ROUTES ─── */
+#saved-routes-section {
+  padding: 12px 14px 4px;
+}
+
+.saved-routes-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--teal);
+}
+
+.saved-routes-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.saved-routes-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-sub);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+#saved-routes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.saved-route-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  transition: border-color .2s, background .2s, box-shadow .2s;
+}
+
+.saved-route-item:hover {
+  border-color: var(--teal);
+  background: var(--teal-light);
+  box-shadow: 0 2px 8px rgba(0, 157, 133, .12);
+}
+
+.saved-route-content {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.saved-route-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 3px;
+}
+
+.saved-route-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-sub);
+}
+
+.saved-route-del {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all .15s;
+}
+
+.saved-route-del:hover {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+/* ─── ROUTE SAVE BUTTON ─── */
+.route-save-actions {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-save-route {
+  padding: 8px 20px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--teal), #00b89c);
+  color: #fff;
+  border: none;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 157, 133, .25);
+  transition: opacity .2s, transform .1s;
+}
+
+.btn-save-route:hover {
+  opacity: .9;
+}
+
+.btn-save-route:active {
+  transform: scale(.97);
 }

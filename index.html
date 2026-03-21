@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>차량운행일지</title>
+  <title>차도리 - 차량 운행 도우미 리포트</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.css">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -12,7 +12,7 @@
 <body>
 
   <header id="app-header">
-    <h1><span class="car-icon">🚗</span> 차량운행일지</h1>
+    <h1><span class="car-icon">🚗</span> 차도리 <span class="header-sub">차량 운행 도우미 리포트</span></h1>
     <div class="header-btns">
       <button id="btn-help" class="btn-header-ghost">❓ 도움말</button>
       <button id="btn-settings" class="btn-header">⚙️ 설정</button>
@@ -80,6 +80,16 @@
     <!-- RIGHT PANEL: 구간별 거리 (항상 렌더링되나 초기엔 내용없음) -->
     <aside id="right-panel">
       <div id="right-scroll">
+
+        <!-- 저장된 경로 목록 -->
+        <div id="saved-routes-section" style="display:none">
+          <div class="saved-routes-header">
+            <span class="saved-routes-title">📂 저장된 경로</span>
+            <span class="saved-routes-count" id="saved-routes-count"></span>
+          </div>
+          <div id="saved-routes-list"></div>
+        </div>
+
         <!-- 초기 빈 상태 표시 -->
         <div id="results-placeholder"
           style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text-sub); text-align:center; padding:20px; gap:12px;">
@@ -92,7 +102,6 @@
           <div class="results-header">
             <span class="results-title">📊 구간별 정보</span>
             <span id="total-km" class="results-total">—</span>
-            <button class="btn-primary" id="btn-save" style="display:none">💾 저장</button>
           </div>
           <table id="segments-table">
             <thead>
@@ -101,6 +110,7 @@
                 <th>출발지</th>
                 <th>도착지</th>
                 <th>거리</th>
+                <th>소요시간</th>
                 <th>복사</th>
               </tr>
             </thead>
@@ -109,10 +119,14 @@
               <tr class="total-row">
                 <td colspan="3">합계</td>
                 <td id="total-km-foot">—</td>
+                <td id="total-dur-foot">—</td>
                 <td></td>
               </tr>
             </tfoot>
           </table>
+          <div class="route-save-actions">
+            <button class="btn-save-route" id="btn-save-route">💾 경로 저장</button>
+          </div>
         </div>
       </div>
     </aside>
