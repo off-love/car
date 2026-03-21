@@ -666,15 +666,18 @@ document.getElementById('segments-body').addEventListener('click', e => {
 function saveRoute() {
   if (!S.segments.length) { toast('먼저 경로를 계산해주세요'); return; }
 
-  // 경유지 요약 라벨 생성 (첫 출발지 → 마지막 도착지)
-  const firstFrom = S.segments[0]?.from || '?';
-  const lastTo = S.segments[S.segments.length - 1]?.to || '?';
+  // 전체 경로 라벨 생성 (출발지 → 경유지1 → 경유지2 → ... → 도착지)
+  const stops = [S.segments[0]?.from];
+  S.segments.forEach(seg => stops.push(seg.to));
+  // 연속 중복 제거 (사무실→사무실 같은 경우 방지)
+  const uniqueStops = stops.filter((s, i) => i === 0 || s !== stops[i - 1]);
+  const label = uniqueStops.join(' → ');
   const totalDuration = S.segments.reduce((sum, seg) => sum + (seg.duration || 0), 0);
 
   const record = {
     id: genId(),
     date: new Date().toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }),
-    label: `${firstFrom} → ${lastTo}`,
+    label,
     totalDist: S.totalDist,
     totalDuration,
     waypoints: S.waypoints.map(w => ({ ...w })),
