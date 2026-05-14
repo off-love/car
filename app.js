@@ -177,19 +177,146 @@ function renderMapRoute(points, routeCoords) {
 // ============================================================
 // WAYPOINTS
 // ============================================================
+let draggedWpId = null;
+let activeWpDrag = null;
+
 function genId() { return '_' + Math.random().toString(36).slice(2, 9); }
 
 function createWaypoint() {
   return { id: genId(), address: '', x: '', y: '', region: '' };
 }
 
+function getWaypointIndexById(id) {
+  return S.waypoints.findIndex(wp => wp.id === id);
+}
+
+function clearWaypointDropIndicators() {
+  document.querySelectorAll('.wp-item.drag-over-before, .wp-item.drag-over-after')
+    .forEach(el => el.classList.remove('drag-over-before', 'drag-over-after'));
+}
+
+function syncWaypointInputs() {
+  document.querySelectorAll('.wp-item').forEach(item => {
+    const wpIdx = getWaypointIndexById(item.dataset.id);
+    const input = item.querySelector('.wp-addr-input');
+    if (wpIdx < 0 || !input) return;
+
+    const val = input.value.trim();
+    if (!val) {
+      S.waypoints[wpIdx] = { ...S.waypoints[wpIdx], address: '', x: '', y: '' };
+      return;
+    }
+
+    if (val !== S.waypoints[wpIdx].address) {
+      S.waypoints[wpIdx] = { ...S.waypoints[wpIdx], address: val, x: '', y: '' };
+    }
+  });
+}
+
+function getWaypointDropTarget(clientY, excludeId) {
+  const items = Array.from(document.querySelectorAll('.wp-item'))
+    .filter(item => item.dataset.id !== excludeId);
+
+  let lastTarget = null;
+  for (const item of items) {
+    const rect = item.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    if (clientY < midpoint) {
+      return { id: item.dataset.id, placeAfter: false };
+    }
+    lastTarget = { id: item.dataset.id, placeAfter: true };
+  }
+  return lastTarget;
+}
+
+function showWaypointDropTarget(target) {
+  clearWaypointDropIndicators();
+  if (!target) return;
+  const item = document.querySelector(`.wp-item[data-id="${target.id}"]`);
+  if (item) item.classList.add(target.placeAfter ? 'drag-over-after' : 'drag-over-before');
+}
+
+function dropWaypointAt(fromId, target) {
+  if (!fromId || !target || fromId === target.id) return;
+
+  const fromIdx = getWaypointIndexById(fromId);
+  const targetIdx = getWaypointIndexById(target.id);
+  if (fromIdx < 0 || targetIdx < 0) return;
+
+  let toIdx = targetIdx + (target.placeAfter ? 1 : 0);
+  if (fromIdx < toIdx) toIdx -= 1;
+  moveWpTo(fromIdx, toIdx);
+}
+
+function endWaypointDrag() {
+  if (activeWpDrag?.item) activeWpDrag.item.classList.remove('dragging');
+  activeWpDrag = null;
+  draggedWpId = null;
+  clearWaypointDropIndicators();
+}
+
+function moveWpTo(fromIdx, toIdx) {
+  if (fromIdx === toIdx) return;
+  if (fromIdx < 0 || fromIdx >= S.waypoints.length) return;
+  if (toIdx < 0 || toIdx >= S.waypoints.length) return;
+
+  syncWaypointInputs();
+  const [wp] = S.waypoints.splice(fromIdx, 1);
+  S.waypoints.splice(toIdx, 0, wp);
+  renderWaypoints();
+}
+
 function renderWaypoints() {
   const list = document.getElementById('waypoints-list');
   list.innerHTML = '';
   S.waypoints.forEach((wp, i) => {
+    const wpId = wp.id;
     const li = document.createElement('li');
     li.className = 'wp-item';
-    li.dataset.id = wp.id;
+    li.dataset.id = wpId;
+
+    // Drag handle
+    const dragHandle = document.createElement('button');
+    dragHandle.type = 'button';
+    dragHandle.className = 'wp-drag-handle';
+    dragHandle.title = '드래그해서 순서 변경';
+    dragHandle.setAttribute('aria-label', `${i + 1}번 경유지 순서 변경`);
+    dragHandle.textContent = '⋮⋮';
+    dragHandle.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+
+      draggedWpId = wpId;
+      activeWpDrag = { id: wpId, item: li, target: null };
+      li.classList.add('dragging');
+      dragHandle.setPointerCapture(e.pointerId);
+
+      const onPointerMove = moveEvent => {
+        if (!activeWpDrag || moveEvent.pointerId !== e.pointerId) return;
+        activeWpDrag.target = getWaypointDropTarget(moveEvent.clientY, wpId);
+        showWaypointDropTarget(activeWpDrag.target);
+      };
+      const onPointerUp = upEvent => {
+        if (upEvent.pointerId !== e.pointerId) return;
+        if (activeWpDrag?.target) dropWaypointAt(activeWpDrag.id, activeWpDrag.target);
+        endWaypointDrag();
+        controller.abort();
+      };
+      const onPointerCancel = cancelEvent => {
+        if (cancelEvent.pointerId !== e.pointerId) return;
+        endWaypointDrag();
+        controller.abort();
+      };
+      const controller = new AbortController();
+      document.addEventListener('pointermove', onPointerMove, { signal: controller.signal });
+      document.addEventListener('pointerup', onPointerUp, { signal: controller.signal });
+      document.addEventListener('pointercancel', onPointerCancel, { signal: controller.signal });
+    });
+    dragHandle.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      moveWp(i, e.key === 'ArrowUp' ? -1 : 1);
+    });
 
     // Number badge
     const num = document.createElement('div');
@@ -218,33 +345,42 @@ function renderWaypoints() {
       // 한글 조합이 끝난 최종 value를 얻기 위해 약간의 지연
       setTimeout(async () => {
         const val = input.value.trim();
+        const wpIdx = getWaypointIndexById(wpId);
+        if (wpIdx < 0) return;
+
         if (!val) {
-          S.waypoints[i] = { ...S.waypoints[i], address: '', x: '', y: '' };
+          S.waypoints[wpIdx] = { ...S.waypoints[wpIdx], address: '', x: '', y: '' };
           input.classList.remove('filled', 'error', 'geocoding');
           return;
         }
-        if (val === S.waypoints[i].address && S.waypoints[i].x) return; // 변화없음
+        if (val === S.waypoints[wpIdx].address && S.waypoints[wpIdx].x) return; // 변화없음
 
-        S.waypoints[i].address = val;
+        S.waypoints[wpIdx].address = val;
         input.title = val; // 툴팁 업데이트
         input.classList.add('geocoding');
         input.classList.remove('error');
         try {
           const result = await geocodeByRest(val);
+          const latestWpIdx = getWaypointIndexById(wpId);
+          if (latestWpIdx < 0 || S.waypoints[latestWpIdx].address !== val) return;
+
           if (result) {
-            S.waypoints[i].x = result.x;
-            S.waypoints[i].y = result.y;
+            S.waypoints[latestWpIdx].x = result.x;
+            S.waypoints[latestWpIdx].y = result.y;
             input.classList.add('filled');
             input.classList.remove('error');
           } else {
-            S.waypoints[i].x = '';
-            S.waypoints[i].y = '';
+            S.waypoints[latestWpIdx].x = '';
+            S.waypoints[latestWpIdx].y = '';
             input.classList.add('error');
             toast('주소를 찾지 못했습니다. 🔍 버튼으로 직접 검색해보세요', 3000);
           }
         } catch {
-          S.waypoints[i].x = '';
-          S.waypoints[i].y = '';
+          const latestWpIdx = getWaypointIndexById(wpId);
+          if (latestWpIdx >= 0) {
+            S.waypoints[latestWpIdx].x = '';
+            S.waypoints[latestWpIdx].y = '';
+          }
           input.classList.add('error');
         } finally {
           input.classList.remove('geocoding');
@@ -270,14 +406,10 @@ function renderWaypoints() {
       b.addEventListener('click', fn); return b;
     };
     btns.append(
-      mkBtn('↑', '', '위로 이동', () => moveWp(i, -1)),
-      mkBtn('↓', '', '아래로 이동', () => moveWp(i, 1)),
       mkBtn('✕', 'del', '삭제', () => removeWp(i))
     );
-    btns.children[0].disabled = i === 0;
-    btns.children[1].disabled = i === S.waypoints.length - 1;
 
-    li.append(num, input, searchBtn, btns);
+    li.append(dragHandle, num, input, searchBtn, btns);
     list.appendChild(li);
   });
 }
@@ -287,20 +419,20 @@ function addWp() {
     toast('경유지는 최대 10개까지 추가할 수 있습니다.');
     return;
   }
+  syncWaypointInputs();
   S.waypoints.push(createWaypoint());
   renderWaypoints();
 }
 
 function removeWp(i) {
+  syncWaypointInputs();
   S.waypoints.splice(i, 1);
   renderWaypoints();
 }
 
 function moveWp(i, dir) {
   const j = i + dir;
-  if (j < 0 || j >= S.waypoints.length) return;
-  [S.waypoints[i], S.waypoints[j]] = [S.waypoints[j], S.waypoints[i]];
-  renderWaypoints();
+  moveWpTo(i, j);
 }
 
 function resetWaypoints() {

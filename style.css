@@ -258,10 +258,64 @@ table .col-action {
 }
 
 .wp-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   animation: fadeIn .18s ease;
+}
+
+.wp-item.dragging {
+  opacity: .45;
+}
+
+.wp-item.drag-over-before::before,
+.wp-item.drag-over-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--teal);
+  box-shadow: 0 0 0 2px var(--teal-light);
+}
+
+.wp-item.drag-over-before::before {
+  top: -4px;
+}
+
+.wp-item.drag-over-after::after {
+  bottom: -4px;
+}
+
+.wp-drag-handle {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: grab;
+  touch-action: none;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.wp-drag-handle:hover,
+.wp-drag-handle:focus-visible {
+  background: var(--teal-light);
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.wp-drag-handle:active {
+  cursor: grabbing;
 }
 
 @keyframes fadeIn {
