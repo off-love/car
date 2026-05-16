@@ -586,23 +586,80 @@ async function imageFileToCanvas(file) {
 
 function cleanOcrAddressLine(line) {
   return line
+    .replace(/\u00a0/g, ' ')
     .replace(/[|＿_]/g, ' ')
+    .replace(/[［\[{]/g, '(')
+    .replace(/[］\]}]/g, ')')
     .replace(/[“”‘’"'`]/g, '')
+    .replace(/\b(?:T\.?|TEL|전화|연락처)\s*[:：]?\s*\d{2,4}[-.\s]\d{3,4}[-.\s]\d{4}.*$/i, '')
+    .replace(/^\s*\(?우(?:편번호)?\)?\s*\d{3,5}(?:[-\s]\d{2,3})?\s*/i, '')
+    .replace(/^\s*\(?\d{5}\)?\s+(?=[가-힣])/, '')
     .replace(/\s+/g, ' ')
-    .replace(/^[\s\d①-⑳().\-]+/, '')
-    .replace(/^(출발지|도착지|출발|도착|경유지|목적지|방문지|주소|위치|도로명|지번)\s*[:：-]?\s*/i, '')
+    .replace(/^\s*(?:[①-⑳]|[가-하]|\d{1,2})[\).:：-]\s+/, '')
+    .replace(/^(출발지|도착지|출발|도착|경유지|목적지|방문지|주소지|주소|소재지|위치|도로명주소|지번주소|도로명|지번|장소|상호|업체명)\s*[:：-]?\s*/i, '')
     .replace(/\s*(전화|TEL|연락처|팩스|사업자|대표자).*$/i, '')
+    .replace(/^[\s,.;:：/~-]+|[\s,.;:：/~-]+$/g, '')
     .trim();
+}
+
+function getAddressSignal(line) {
+  const sido = /(서울(?:특별시|시)?|부산(?:광역시|시)?|대구(?:광역시|시)?|인천(?:광역시|시)?|광주(?:광역시|시)?|대전(?:광역시|시)?|울산(?:광역시|시)?|세종(?:특별자치시|시)?|경기(?:도)?|강원(?:특별자치도|도)?|충북|충청북도|충남|충청남도|전북|전라북도|전남|전라남도|경북|경상북도|경남|경상남도|제주(?:특별자치도|도)?)/;
+  const sigungu = /[가-힣]{1,10}(?:시|군|구)(?:\s+[가-힣]{1,10}구)?/;
+  const legalArea = /[가-힣][가-힣0-9]*(?:읍|면|동|리|가)/;
+  const roadName = /[가-힣A-Za-z0-9.·ㆍ-]+(?:대로|번길|로|길|고속도로)/;
+  const roadWithNumber = /[가-힣A-Za-z0-9.·ㆍ-]+(?:대로|번길|로|길|고속도로)\s*(?:지하\s*)?\d{1,5}(?:-\d{1,5})?/;
+  const jibunWithNumber = /[가-힣][가-힣0-9]*(?:읍|면|동|리|가)\s*(?:산\s*)?\d{1,5}(?:-\d{1,5})?/;
+  const mountainJibun = /[가-힣][가-힣0-9]*(?:읍|면|동|리)\s+산\s*\d{1,5}(?:-\d{1,5})?/;
+  const detail = /(아파트|빌딩|타워|센터|상가|오피스텔|회관|본관|별관|사옥|타운|프라자|몰|관|층|호|지하\s*\d?층?)/i;
+
+  const hasSido = sido.test(line);
+  const hasSigungu = sigungu.test(line);
+  const hasLegalArea = legalArea.test(line);
+  const hasRoadName = roadName.test(line);
+  const hasRoadNumber = roadWithNumber.test(line);
+  const hasJibun = jibunWithNumber.test(line) || mountainJibun.test(line);
+  const hasDetail = detail.test(line);
+  const hasAdministrative = hasSido || hasSigungu;
+  const hasSpecific = hasRoadNumber || hasJibun;
+
+  let score = 0;
+  if (hasSido) score += 2;
+  if (hasSigungu) score += 2;
+  if (hasLegalArea) score += 1;
+  if (hasRoadName) score += 1;
+  if (hasRoadNumber) score += 5;
+  if (hasJibun) score += 5;
+  if (hasDetail) score += 1;
+
+  return { score, hasAdministrative, hasLegalArea, hasRoadName, hasSpecific };
+}
+
+function isAdministrativeOnly(line) {
+  if (/\d/.test(line)) return false;
+  if (!/(특별시|광역시|특별자치시|특별자치도|[가-힣]+도|[가-힣]+시|[가-힣]+군|[가-힣]+구)/.test(line)) return false;
+  const rest = line
+    .replace(/(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|특별시|광역시|특별자치시|특별자치도|[가-힣]+도|[가-힣]+시|[가-힣]+군|[가-힣]+구|\s)/g, '');
+  return rest.length === 0;
+}
+
+function isAddressFragment(line) {
+  const signal = getAddressSignal(line);
+  return signal.hasAdministrative
+    || signal.hasLegalArea
+    || signal.hasRoadName
+    || /^(?:(?:산|지하)\s*)?\d{1,5}(?:-\d{1,5})?(?:\s|$)/.test(line);
 }
 
 function isLikelyAddress(line) {
   if (line.length < 2 || line.length > 90) return false;
   if (!/[가-힣]/.test(line)) return false;
-  if (/(합계|소요|거리|검색|저장|초기화|도움말|설정|이미지|캡처|선택|확인|취소|추가|입력|전화|TEL|사업자|경로 계산|차도리|차량 운행|리포트|주소 입력|경유지 입력|사무실 주소)/i.test(line)) return false;
+  if (/(합계|소요|거리|검색|저장|초기화|도움말|설정|이미지|캡처|선택|확인|취소|추가|입력|전화|TEL|사업자|경로 계산|차도리|차량 운행|리포트|주소 입력|경유지 입력|사무실 주소|네이버지도|카카오맵|지도|공유|닫기|복사|거리뷰|위성|교통정보)/i.test(line)) return false;
 
-  const hasRegion = /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|특별시|광역시|특별자치시|특별자치도|[가-힣]{2,}(시|군|구))/.test(line);
-  const hasAddressToken = /([가-힣0-9]+(대로|번길|로|길)\s*\d|[가-힣]+(동|읍|면|리|가)\s*\d|산\s*\d|\d{1,4}\s*-\s*\d{1,4})/.test(line);
-  if (/\d/.test(line)) return line.length >= 7 && hasRegion && hasAddressToken;
+  const signal = getAddressSignal(line);
+  if (signal.hasSpecific && (signal.hasAdministrative || signal.score >= 5)) return true;
+  if (signal.hasRoadName && !/\d/.test(line)) return false;
+  if (isAdministrativeOnly(line)) return false;
+  if (/\d/.test(line)) return signal.score >= 5;
 
   const hangulCount = (line.match(/[가-힣]/g) || []).length;
   const looksLikePlaceName = hangulCount >= 3
@@ -616,15 +673,41 @@ function isLikelyAddress(line) {
 function extractAddressCandidates(text) {
   const pieces = text
     .replace(/\r/g, '\n')
-    .replace(/[•·●○◯◎■▶→▲△▼▽]/g, '\n')
+    .replace(/[•●○◯◎■▶→▲△▼▽]/g, '\n')
     .replace(/(?:경유지|주소)\s*입력/gi, '\n')
-    .replace(/(?:출발지|도착지|출발|도착|경유지|목적지|방문지|주소|위치|도로명|지번)\s*[:：-]\s*/gi, '\n')
+    .replace(/(?:출발지|도착지|출발|도착|경유지|목적지|방문지|주소지|주소|소재지|위치|도로명주소|지번주소|도로명|지번)\s*[:：-]\s*/gi, '\n')
+    .replace(/[;；]/g, '\n')
     .split('\n')
     .map(cleanOcrAddressLine)
     .filter(Boolean);
 
+  const candidates = [];
+  for (let i = 0; i < pieces.length; i++) {
+    let merged = null;
+    for (let span = Math.min(3, pieces.length - i); span >= 2; span--) {
+      const parts = pieces.slice(i, i + span);
+      const combined = cleanOcrAddressLine(parts.join(' '));
+      if (
+        isLikelyAddress(combined)
+        && !getAddressSignal(parts[0]).hasSpecific
+        && !(span > 2 && getAddressSignal(parts[2]).hasAdministrative)
+        && parts.every(isAddressFragment)
+      ) {
+        merged = { line: combined, span };
+        break;
+      }
+    }
+
+    if (merged) {
+      candidates.push(merged.line);
+      i += merged.span - 1;
+    } else {
+      candidates.push(pieces[i]);
+    }
+  }
+
   const seen = new Set();
-  return pieces
+  return candidates
     .filter(isLikelyAddress)
     .filter(line => {
       const key = line.replace(/[^0-9가-힣]/g, '');
