@@ -957,7 +957,8 @@ table .col-action {
 
 .ocr-source:hover,
 .ocr-source:focus-visible,
-.ocr-source.drag-over {
+.ocr-source.drag-over,
+.ocr-source.paste-ready {
   outline: none;
   border-color: var(--teal);
   background: var(--teal-light);
@@ -1001,7 +1002,13 @@ table .col-action {
   white-space: nowrap;
 }
 
-.ocr-file-button {
+.ocr-source-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ocr-source-button {
   padding: 8px 12px;
   border: none;
   border-radius: 8px;
@@ -1012,7 +1019,11 @@ table .col-action {
   white-space: nowrap;
 }
 
-.ocr-file-button:disabled {
+.ocr-source-button.paste {
+  background: var(--blue);
+}
+
+.ocr-source-button:disabled {
   opacity: .55;
   cursor: default;
 }
@@ -1025,6 +1036,20 @@ table .col-action {
   border: 1px solid var(--border);
   background: #fff;
   margin-bottom: 12px;
+}
+
+@media (max-width: 560px) {
+  .ocr-source {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .ocr-source-actions {
+    grid-column: 1 / -1;
+  }
+
+  .ocr-source-button {
+    flex: 1;
+  }
 }
 
 .ocr-status {

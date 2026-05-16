@@ -516,7 +516,7 @@ function resetOcrModal() {
   document.getElementById('ocr-empty').style.display = 'none';
   document.getElementById('btn-apply-ocr-addresses').disabled = true;
   document.getElementById('ocr-file-input').value = '';
-  document.getElementById('ocr-source-meta').textContent = '붙여넣기 / 드래그 / 파일 선택';
+  document.getElementById('ocr-source-meta').textContent = 'Ctrl+V / ⌘V / 드래그 / 파일 선택';
   document.getElementById('ocr-drop-zone').classList.remove('drag-over', 'processing');
   const preview = document.getElementById('ocr-preview');
   preview.style.display = 'none';
@@ -537,6 +537,7 @@ function updateOcrApplyState() {
 function setOcrProcessing(processing) {
   document.getElementById('ocr-drop-zone').classList.toggle('processing', processing);
   document.getElementById('btn-ocr-pick-file').disabled = processing;
+  document.getElementById('btn-ocr-paste').disabled = processing;
   document.getElementById('btn-ocr-recapture').disabled = processing;
 }
 
@@ -747,15 +748,55 @@ function renderOcrCandidates(candidates) {
 
 function openOcrImport() {
   resetOcrModal();
-  setOcrStatus('이미지를 넣으면 주소를 인식합니다');
+  setOcrStatus('캡처 이미지를 붙여넣으면 주소를 인식합니다');
   openModal('modal-ocr');
-  setTimeout(() => document.getElementById('ocr-drop-zone')?.focus(), 0);
+  setTimeout(focusOcrDropZone, 0);
+}
+
+function focusOcrDropZone() {
+  const zone = document.getElementById('ocr-drop-zone');
+  zone?.focus();
+  zone?.classList.add('paste-ready');
+  setTimeout(() => zone?.classList.remove('paste-ready'), 700);
 }
 
 function getImageFromPaste(e) {
+  const files = Array.from(e.clipboardData?.files || []);
+  const imageFile = files.find(file => file.type.startsWith('image/'));
+  if (imageFile) return imageFile;
+
   const items = Array.from(e.clipboardData?.items || []);
   const imageItem = items.find(item => item.type.startsWith('image/'));
   return imageItem?.getAsFile() || null;
+}
+
+async function readImageFromClipboard() {
+  if (!navigator.clipboard?.read) return null;
+  const items = await navigator.clipboard.read();
+  for (const item of items) {
+    const imageType = item.types.find(type => type.startsWith('image/'));
+    if (imageType) return item.getType(imageType);
+  }
+  return null;
+}
+
+async function pasteOcrImageFromClipboard() {
+  focusOcrDropZone();
+  setOcrStatus('클립보드 이미지를 확인 중...');
+
+  try {
+    const file = await readImageFromClipboard();
+    if (file) {
+      await processOcrImage(file);
+      return;
+    }
+    setOcrStatus('캡처 이미지를 Ctrl+V 또는 ⌘V로 붙여넣어 주세요');
+    toast('클립보드에 이미지가 없습니다. 캡처 후 Ctrl+V 또는 ⌘V를 눌러주세요', 3500);
+  } catch (err) {
+    console.warn('Clipboard image read failed:', err);
+    setOcrStatus('캡처 이미지를 Ctrl+V 또는 ⌘V로 붙여넣어 주세요');
+    toast('붙여넣기 영역을 클릭한 뒤 Ctrl+V 또는 ⌘V를 눌러주세요', 3500);
+  }
 }
 
 function openOcrFilePicker() {
@@ -1464,6 +1505,10 @@ document.getElementById('btn-help').addEventListener('click', () => openModal('m
 document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
 document.getElementById('btn-add-wp').addEventListener('click', addWp);
 document.getElementById('btn-ocr-capture').addEventListener('click', openOcrImport);
+document.getElementById('btn-ocr-paste').addEventListener('click', e => {
+  e.stopPropagation();
+  pasteOcrImageFromClipboard();
+});
 document.getElementById('btn-ocr-pick-file').addEventListener('click', e => {
   e.stopPropagation();
   openOcrFilePicker();
@@ -1472,12 +1517,13 @@ document.getElementById('btn-ocr-recapture').addEventListener('click', openOcrFi
 document.getElementById('ocr-file-input').addEventListener('change', e => processOcrImage(e.target.files?.[0]));
 document.getElementById('ocr-drop-zone').addEventListener('click', e => {
   if (e.target.closest('button')) return;
-  openOcrFilePicker();
+  focusOcrDropZone();
+  setOcrStatus('캡처 이미지를 Ctrl+V 또는 ⌘V로 붙여넣어 주세요');
 });
 document.getElementById('ocr-drop-zone').addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   e.preventDefault();
-  openOcrFilePicker();
+  pasteOcrImageFromClipboard();
 });
 document.getElementById('ocr-drop-zone').addEventListener('dragover', e => {
   e.preventDefault();
