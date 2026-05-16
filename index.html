@@ -42,6 +42,8 @@
           <!-- 경유지 목록 -->
           <ul id="waypoints-list"></ul>
 
+          <button class="btn-ocr-capture" id="btn-ocr-capture">📷 이미지로 주소 입력</button>
+
           <!-- 경유지 추가 버튼 -->
           <button class="btn-add-wp" id="btn-add-wp">＋ 추가</button>
 
@@ -221,6 +223,28 @@
       <div class="modal-body">
         <p class="ambig-desc">동일한 주소가 여러 지역에 있습니다.<br>정확한 지역을 선택해 주세요.</p>
         <ul id="ambig-list" class="ambig-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== MODAL: 이미지 주소 인식 ====== -->
+  <div class="modal-backdrop" id="modal-ocr">
+    <div class="modal modal-ocr">
+      <div class="modal-header">
+        <h2>📷 이미지 주소 인식</h2>
+        <button class="modal-close" data-close="modal-ocr">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="ocr-status" id="ocr-status">캡처를 시작합니다</div>
+        <div class="ocr-progress" id="ocr-progress" style="display:none">
+          <div class="ocr-progress-bar" id="ocr-progress-bar"></div>
+        </div>
+        <div class="ocr-empty" id="ocr-empty" style="display:none">주소 후보가 없습니다</div>
+        <ol class="ocr-address-list" id="ocr-address-list"></ol>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" id="btn-ocr-recapture">다시 캡처</button>
+        <button class="btn-primary" id="btn-apply-ocr-addresses" disabled>주소 적용</button>
       </div>
     </div>
   </div>

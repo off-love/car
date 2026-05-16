@@ -489,6 +489,29 @@ table .col-action {
   pointer-events: none;
 }
 
+/* ─── OCR ADDRESS IMPORT ─── */
+.btn-ocr-capture {
+  width: 100%;
+  padding: 9px;
+  border-radius: 8px;
+  background: var(--blue-light);
+  border: 1.5px solid var(--blue);
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 700;
+  transition: background .2s, color .2s, transform .1s;
+  margin-bottom: 8px;
+}
+
+.btn-ocr-capture:hover {
+  background: var(--blue);
+  color: #fff;
+}
+
+.btn-ocr-capture:active {
+  transform: scale(.98);
+}
+
 /* ─── ADD WAYPOINT BTN ─── */
 .btn-add-wp {
   width: 100%;
@@ -793,6 +816,10 @@ table .col-action {
   height: 480px;
 }
 
+.modal-ocr {
+  width: 560px;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -846,6 +873,87 @@ table .col-action {
 #postcode-wrap {
   width: 100%;
   height: 100%;
+}
+
+/* ─── OCR MODAL ─── */
+.ocr-status {
+  padding: 11px 12px;
+  border-radius: 8px;
+  background: var(--blue-light);
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.ocr-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.ocr-progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--teal), var(--blue));
+  transition: width .2s ease;
+}
+
+.ocr-empty {
+  padding: 20px 12px;
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-sub);
+  font-size: 13px;
+  text-align: center;
+}
+
+.ocr-address-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ocr-address-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.ocr-address-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ocr-address-input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.ocr-address-input:focus {
+  outline: none;
+  border-color: var(--teal);
+  background: var(--white);
+  box-shadow: 0 0 0 3px rgba(0, 157, 133, .15);
 }
 
 /* ─── SETTINGS ─── */

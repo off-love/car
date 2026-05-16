@@ -24,6 +24,7 @@ const S = {
   polylines: [],
   favorites: [],
   savedRoutes: [], // 저장된 경로 (최대 3건)
+  ocrCandidates: [],
   pendingWpIdx: null,    // 주소 검색 대상 waypoint index
   pendingPostcodeData: null, // 중복 주소 확인 대기 데이터
   kakaoLoaded: false
@@ -118,6 +119,24 @@ function loadDaumPostcode() {
     s.onload = res;
     document.head.appendChild(s);
   });
+}
+
+let tesseractLoadPromise;
+function loadTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (tesseractLoadPromise) return tesseractLoadPromise;
+
+  tesseractLoadPromise = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = () => window.Tesseract ? res(window.Tesseract) : rej(new Error('OCR 라이브러리 초기화 실패'));
+    s.onerror = () => rej(new Error('OCR 라이브러리 로드 실패'));
+    document.head.appendChild(s);
+  }).catch(err => {
+    tesseractLoadPromise = null;
+    throw err;
+  });
+  return tesseractLoadPromise;
 }
 
 // ============================================================
@@ -471,6 +490,265 @@ function resetWaypoints() {
   S.waypoints = Array.from({ length: 5 }, createWaypoint); // 기본 5개
   renderWaypoints();
   clearResults();
+}
+
+// ============================================================
+// OCR ADDRESS IMPORT
+// ============================================================
+function setOcrStatus(message) {
+  const el = document.getElementById('ocr-status');
+  if (el) el.textContent = message;
+}
+
+function setOcrProgress(progress) {
+  const wrap = document.getElementById('ocr-progress');
+  const bar = document.getElementById('ocr-progress-bar');
+  if (!wrap || !bar) return;
+
+  wrap.style.display = progress == null ? 'none' : '';
+  bar.style.width = `${Math.max(4, Math.min(100, Math.round(progress * 100)))}%`;
+}
+
+function resetOcrModal() {
+  S.ocrCandidates = [];
+  document.getElementById('ocr-address-list').innerHTML = '';
+  document.getElementById('ocr-empty').style.display = 'none';
+  document.getElementById('btn-apply-ocr-addresses').disabled = true;
+  setOcrProgress(null);
+}
+
+function updateOcrApplyState() {
+  const hasAddress = Array.from(document.querySelectorAll('.ocr-address-input'))
+    .some(input => input.value.trim());
+  document.getElementById('btn-apply-ocr-addresses').disabled = !hasAddress;
+}
+
+async function captureScreenFrame() {
+  const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+  try {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('캡처 화면을 읽지 못했습니다')), 5000);
+      const ready = () => {
+        if (!video.videoWidth || !video.videoHeight) return;
+        clearTimeout(timer);
+        resolve();
+      };
+      video.onloadedmetadata = ready;
+      video.oncanplay = ready;
+      video.onerror = () => {
+        clearTimeout(timer);
+        reject(new Error('캡처 화면을 읽지 못했습니다'));
+      };
+      video.play().then(ready).catch(err => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+    if (video.requestVideoFrameCallback) {
+      await new Promise(resolve => video.requestVideoFrameCallback(resolve));
+    } else {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  } finally {
+    stream.getTracks().forEach(track => track.stop());
+  }
+}
+
+function cleanOcrAddressLine(line) {
+  return line
+    .replace(/[|＿_]/g, ' ')
+    .replace(/[“”‘’"'`]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\d①-⑳().\-]+/, '')
+    .replace(/^(출발지|도착지|출발|도착|경유지|목적지|방문지|주소|위치|도로명|지번)\s*[:：-]?\s*/i, '')
+    .replace(/\s*(전화|TEL|연락처|팩스|사업자|대표자).*$/i, '')
+    .trim();
+}
+
+function isLikelyAddress(line) {
+  if (line.length < 2 || line.length > 90) return false;
+  if (!/[가-힣]/.test(line)) return false;
+  if (/(합계|소요|거리|검색|저장|초기화|도움말|설정|이미지|캡처|선택|확인|취소|추가|입력|전화|TEL|사업자|경로 계산|차도리|차량 운행|리포트|주소 입력|경유지 입력|사무실 주소)/i.test(line)) return false;
+
+  const hasRegion = /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|특별시|광역시|특별자치시|특별자치도|[가-힣]{2,}(시|군|구))/.test(line);
+  const hasAddressToken = /([가-힣0-9]+(대로|번길|로|길)\s*\d|[가-힣]+(동|읍|면|리|가)\s*\d|산\s*\d|\d{1,4}\s*-\s*\d{1,4})/.test(line);
+  if (/\d/.test(line)) return line.length >= 7 && hasRegion && hasAddressToken;
+
+  const hangulCount = (line.match(/[가-힣]/g) || []).length;
+  const looksLikePlaceName = hangulCount >= 3
+    && line.length <= 35
+    && /^[가-힣A-Za-z0-9\s().&-]+$/.test(line)
+    && !/(출발지|도착지|출발|도착|경유지|목적지|방문지|주소|위치)$/.test(line);
+
+  return looksLikePlaceName;
+}
+
+function extractAddressCandidates(text) {
+  const pieces = text
+    .replace(/\r/g, '\n')
+    .replace(/[•·●○◯◎■▶→▲△▼▽]/g, '\n')
+    .replace(/(?:경유지|주소)\s*입력/gi, '\n')
+    .replace(/(?:출발지|도착지|출발|도착|경유지|목적지|방문지|주소|위치|도로명|지번)\s*[:：-]\s*/gi, '\n')
+    .split('\n')
+    .map(cleanOcrAddressLine)
+    .filter(Boolean);
+
+  const seen = new Set();
+  return pieces
+    .filter(isLikelyAddress)
+    .filter(line => {
+      const key = line.replace(/[^0-9가-힣]/g, '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 10);
+}
+
+function renderOcrCandidates(candidates) {
+  const list = document.getElementById('ocr-address-list');
+  const empty = document.getElementById('ocr-empty');
+  list.innerHTML = '';
+
+  empty.style.display = candidates.length ? 'none' : '';
+  document.getElementById('btn-apply-ocr-addresses').disabled = candidates.length === 0;
+
+  candidates.forEach((address, i) => {
+    const item = document.createElement('li');
+    item.className = 'ocr-address-item';
+
+    const num = document.createElement('span');
+    num.className = 'ocr-address-num';
+    num.textContent = i + 1;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'ocr-address-input';
+    input.value = address;
+    input.addEventListener('input', updateOcrApplyState);
+
+    item.append(num, input);
+    list.appendChild(item);
+  });
+}
+
+async function startOcrCapture() {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    toast('이 브라우저에서는 화면 캡처를 사용할 수 없습니다', 3500);
+    return;
+  }
+
+  resetOcrModal();
+  setOcrStatus('캡처할 화면을 선택해주세요');
+  toast('캡처할 화면을 선택해주세요', 2500);
+
+  try {
+    const canvas = await captureScreenFrame();
+    openModal('modal-ocr');
+    setOcrStatus('OCR 준비 중...');
+    const Tesseract = await loadTesseract();
+
+    setOcrStatus('텍스트 인식 중...');
+    setOcrProgress(.05);
+    const result = await Tesseract.recognize(canvas, 'kor+eng', {
+      logger: msg => {
+        if (typeof msg.progress === 'number') setOcrProgress(msg.progress);
+        if (msg.status === 'recognizing text') setOcrStatus('텍스트 인식 중...');
+      }
+    });
+
+    const candidates = extractAddressCandidates(result.data?.text || '');
+    S.ocrCandidates = candidates;
+    setOcrProgress(null);
+    setOcrStatus(candidates.length ? `${candidates.length}개 주소 후보를 찾았습니다` : '주소 후보를 찾지 못했습니다');
+    renderOcrCandidates(candidates);
+  } catch (err) {
+    setOcrProgress(null);
+    if (err?.name === 'NotAllowedError') {
+      toast('이미지 캡처가 취소되었습니다');
+    } else {
+      openModal('modal-ocr');
+      console.error('OCR capture failed:', err);
+      setOcrStatus('이미지 인식에 실패했습니다');
+      toast(err?.message || '이미지 인식에 실패했습니다', 4000);
+    }
+  }
+}
+
+async function geocodeWaypointByIndex(i) {
+  const wp = S.waypoints[i];
+  if (!wp?.address) return false;
+
+  const inputs = document.querySelectorAll('.wp-addr-input');
+  const input = inputs[i];
+  if (input) {
+    input.classList.add('geocoding');
+    input.classList.remove('error');
+  }
+
+  const address = wp.address;
+  try {
+    const result = await geocodeByRest(address);
+    if (!S.waypoints[i] || S.waypoints[i].address !== address) return false;
+
+    if (result) {
+      S.waypoints[i].x = result.x;
+      S.waypoints[i].y = result.y;
+      if (input) {
+        input.classList.add('filled');
+        input.classList.remove('error');
+      }
+      return true;
+    }
+
+    S.waypoints[i].x = '';
+    S.waypoints[i].y = '';
+    if (input) input.classList.add('error');
+    return false;
+  } finally {
+    if (input) input.classList.remove('geocoding');
+  }
+}
+
+async function applyOcrAddresses() {
+  const addresses = Array.from(document.querySelectorAll('.ocr-address-input'))
+    .map(input => input.value.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+
+  if (!addresses.length) {
+    toast('적용할 주소가 없습니다');
+    return;
+  }
+
+  const count = addresses.length;
+  S.waypoints = Array.from({ length: Math.max(5, count) }, createWaypoint);
+  addresses.forEach((address, i) => {
+    S.waypoints[i].address = address;
+  });
+
+  renderWaypoints();
+  closeModal('modal-ocr');
+  toast(`${count}개 주소를 입력했습니다. 좌표 확인 중...`, 2500);
+
+  const geocodeResults = await Promise.all(addresses.map((_, i) => geocodeWaypointByIndex(i)));
+  const successCount = geocodeResults.filter(Boolean).length;
+  toast(
+    successCount === count
+      ? `${count}개 주소 입력 완료`
+      : `${successCount}/${count}개 주소 좌표를 확인했습니다`,
+    3500
+  );
 }
 
 // ============================================================
@@ -1062,6 +1340,9 @@ document.getElementById('btn-settings').addEventListener('click', openSettings);
 document.getElementById('btn-help').addEventListener('click', () => openModal('modal-help'));
 document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
 document.getElementById('btn-add-wp').addEventListener('click', addWp);
+document.getElementById('btn-ocr-capture').addEventListener('click', startOcrCapture);
+document.getElementById('btn-ocr-recapture').addEventListener('click', startOcrCapture);
+document.getElementById('btn-apply-ocr-addresses').addEventListener('click', applyOcrAddresses);
 document.getElementById('btn-reset').addEventListener('click', () => {
   if (confirm('경유지를 초기화하시겠습니까?')) resetWaypoints();
 });
