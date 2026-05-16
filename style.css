@@ -750,6 +750,72 @@ table .col-action {
   border-radius: 8px;
 }
 
+.results-empty {
+  flex: 1;
+  min-height: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 12px 22px;
+  text-align: center;
+}
+
+.results-empty-figure {
+  width: min(100%, 310px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.results-empty-bubble {
+  position: relative;
+  max-width: 260px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: var(--white);
+  border: 1.5px solid var(--teal);
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+  box-shadow: 0 6px 18px rgba(0, 58, 111, .12);
+  margin-bottom: 12px;
+}
+
+.results-empty-bubble::before,
+.results-empty-bubble::after {
+  content: '';
+  position: absolute;
+  left: 56%;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+}
+
+.results-empty-bubble::before {
+  bottom: -12px;
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-top: 12px solid var(--teal);
+}
+
+.results-empty-bubble::after {
+  bottom: -9px;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 10px solid var(--white);
+}
+
+.results-empty-img {
+  width: min(100%, 280px);
+  aspect-ratio: 4 / 3;
+  height: auto;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  mix-blend-mode: multiply;
+}
+
 /* ─── TOAST ─── */
 #toast {
   position: fixed;
@@ -1396,6 +1462,51 @@ table td {
     border-top: 1px solid var(--border);
     max-height: 250px;
   }
+
+  .results-empty {
+    min-height: 210px;
+    padding: 12px;
+  }
+
+  .results-empty-figure {
+    flex-direction: row-reverse;
+    justify-content: center;
+    gap: 14px;
+    width: 100%;
+  }
+
+  .results-empty-bubble {
+    margin: 0;
+  }
+
+  .results-empty-bubble::before,
+  .results-empty-bubble::after {
+    left: auto;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .results-empty-bubble::before {
+    right: -12px;
+    bottom: auto;
+    border-top: 11px solid transparent;
+    border-bottom: 11px solid transparent;
+    border-left: 12px solid var(--teal);
+    border-right: 0;
+  }
+
+  .results-empty-bubble::after {
+    right: -9px;
+    bottom: auto;
+    border-top: 9px solid transparent;
+    border-bottom: 9px solid transparent;
+    border-left: 10px solid var(--white);
+    border-right: 0;
+  }
+
+  .results-empty-img {
+    width: min(34vw, 160px);
+  }
 }
 
 @media (max-width: 768px) {
@@ -1408,6 +1519,10 @@ table td {
     border-right: none;
     border-bottom: 1px solid var(--border);
     max-height: 40vh;
+  }
+
+  .results-empty-img {
+    width: min(40vw, 150px);
   }
 }
 
