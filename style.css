@@ -266,7 +266,25 @@ table .col-action {
 }
 
 .wp-item.dragging {
-  opacity: .45;
+  opacity: .28;
+}
+
+.wp-drag-preview {
+  position: fixed;
+  z-index: 1200;
+  margin: 0;
+  padding: 0;
+  border-radius: 8px;
+  background: var(--white);
+  box-shadow: 0 10px 28px rgba(0, 40, 80, .22);
+  opacity: .98;
+  pointer-events: none;
+  animation: none;
+  transform: scale(1.015);
+}
+
+.wp-drag-preview .wp-addr-input {
+  background: var(--white);
 }
 
 .wp-item.drag-over-before::before,
@@ -891,6 +909,90 @@ table .col-action {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.office-address-picker {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  text-align: left;
+  transition: border-color .2s, background .2s, box-shadow .2s;
+}
+
+.office-address-picker:hover,
+.office-address-picker:focus-visible {
+  outline: none;
+  border-color: var(--teal);
+  background: var(--teal-light);
+  box-shadow: 0 0 0 3px rgba(0, 157, 133, .12);
+}
+
+.office-address-picker.has-address {
+  border-color: var(--teal);
+  background: var(--teal-light);
+}
+
+.office-address-picker.needs-attention {
+  border-color: #ef4444;
+  background: #fff0f0;
+  animation: shake .4s;
+}
+
+.office-picker-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--white);
+  border: 1.5px solid var(--teal);
+  color: var(--teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.office-picker-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.office-picker-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--teal);
+}
+
+.office-picker-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.office-address-picker:not(.has-address) .office-picker-value {
+  color: var(--text-sub);
+  font-weight: 500;
+}
+
+.office-picker-action {
+  padding: 6px 11px;
+  border-radius: 6px;
+  background: var(--teal);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .btn-search-sm {

@@ -195,6 +195,34 @@ function clearWaypointDropIndicators() {
     .forEach(el => el.classList.remove('drag-over-before', 'drag-over-after'));
 }
 
+function createWaypointDragPreview(item, pointerY) {
+  const rect = item.getBoundingClientRect();
+  const preview = item.cloneNode(true);
+  const sourceInputs = item.querySelectorAll('input');
+  const previewInputs = preview.querySelectorAll('input');
+
+  previewInputs.forEach((input, idx) => {
+    input.value = sourceInputs[idx]?.value || '';
+    input.setAttribute('readonly', 'readonly');
+    input.tabIndex = -1;
+  });
+
+  preview.classList.remove('dragging', 'drag-over-before', 'drag-over-after');
+  preview.classList.add('wp-drag-preview');
+  preview.style.left = `${rect.left}px`;
+  preview.style.top = `${rect.top}px`;
+  preview.style.width = `${rect.width}px`;
+  preview.style.height = `${rect.height}px`;
+
+  document.body.appendChild(preview);
+  return { preview, offsetY: pointerY - rect.top };
+}
+
+function updateWaypointDragPreview(drag, pointerY) {
+  if (!drag?.preview) return;
+  drag.preview.style.top = `${pointerY - drag.offsetY}px`;
+}
+
 function syncWaypointInputs() {
   document.querySelectorAll('.wp-item').forEach(item => {
     const wpIdx = getWaypointIndexById(item.dataset.id);
@@ -250,6 +278,7 @@ function dropWaypointAt(fromId, target) {
 
 function endWaypointDrag() {
   if (activeWpDrag?.item) activeWpDrag.item.classList.remove('dragging');
+  if (activeWpDrag?.preview) activeWpDrag.preview.remove();
   activeWpDrag = null;
   draggedWpId = null;
   clearWaypointDropIndicators();
@@ -287,12 +316,14 @@ function renderWaypoints() {
       e.preventDefault();
 
       draggedWpId = wpId;
-      activeWpDrag = { id: wpId, item: li, target: null };
+      const { preview, offsetY } = createWaypointDragPreview(li, e.clientY);
+      activeWpDrag = { id: wpId, item: li, target: null, preview, offsetY };
       li.classList.add('dragging');
       dragHandle.setPointerCapture(e.pointerId);
 
       const onPointerMove = moveEvent => {
         if (!activeWpDrag || moveEvent.pointerId !== e.pointerId) return;
+        updateWaypointDragPreview(activeWpDrag, moveEvent.clientY);
         activeWpDrag.target = getWaypointDropTarget(moveEvent.clientY, wpId);
         showWaypointDropTarget(activeWpDrag.target);
       };
@@ -901,6 +932,7 @@ function openSettings() {
   document.getElementById('set-office-y').value = st.officeY || '';
   document.getElementById('set-fix-office').checked = st.fixOffice !== false;
   document.getElementById('set-default-region').value = st.defaultRegion || '';
+  updateOfficeAddressPicker(st.officeAddr || '');
   openModal('modal-settings');
 }
 
@@ -911,6 +943,12 @@ async function saveSettings() {
   const fixOffice = document.getElementById('set-fix-office').checked;
   const defaultRegion = document.getElementById('set-default-region').value;
 
+  if (fixOffice && !officeAddr) {
+    toast('사무실 주소를 먼저 선택해주세요');
+    document.getElementById('btn-search-office').classList.add('needs-attention');
+    return;
+  }
+
   // API 키는 코드에 고정된 상수 사용
   S.settings = { jsKey: KAKAO_JS_KEY, restKey: KAKAO_REST_KEY, officeAddr, officeX, officeY, fixOffice, defaultRegion };
   save('drvlog_settings', S.settings);
@@ -918,6 +956,18 @@ async function saveSettings() {
   updateFixedStops();
   closeModal('modal-settings');
   toast('설정이 저장되었습니다');
+}
+
+function updateOfficeAddressPicker(address) {
+  const picker = document.getElementById('btn-search-office');
+  const valueEl = document.getElementById('office-picker-value');
+  if (!picker || !valueEl) return;
+
+  const hasAddress = !!address;
+  picker.classList.toggle('has-address', hasAddress);
+  picker.classList.remove('needs-attention');
+  valueEl.textContent = hasAddress ? address : '주소를 검색해서 선택하세요';
+  valueEl.title = address || '';
 }
 
 
@@ -973,11 +1023,13 @@ async function geocodeByRest(address) {
 
 // Settings: office address search
 document.getElementById('btn-search-office').addEventListener('click', async () => {
+  document.getElementById('btn-search-office').classList.remove('needs-attention');
   await loadDaumPostcode();
   new daum.Postcode({
     async oncomplete(data) {
       const addr = data.roadAddress || data.jibunAddress;
       document.getElementById('set-office-addr').value = addr;
+      updateOfficeAddressPicker(addr);
       let coords = null;
       // 1순위: JS SDK Geocoder
       if (window.kakao?.maps?.services) {

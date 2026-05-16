@@ -155,10 +155,15 @@
             <span style="font-size: 13px; font-weight: 500;">출발·도착지 사무실로 자동 고정</span>
           </div>
 
-          <div class="setting-row">
-            <input type="text" id="set-office-addr" class="setting-input" placeholder="주소 검색 클릭" readonly>
-            <button class="btn-search-sm" id="btn-search-office">주소 검색</button>
-          </div>
+          <button type="button" class="office-address-picker" id="btn-search-office">
+            <span class="office-picker-icon">🔍</span>
+            <span class="office-picker-copy">
+              <span class="office-picker-label">사무실 주소</span>
+              <span class="office-picker-value" id="office-picker-value">주소를 검색해서 선택하세요</span>
+            </span>
+            <span class="office-picker-action">검색</span>
+          </button>
+          <input type="hidden" id="set-office-addr">
           <input type="hidden" id="set-office-x">
           <input type="hidden" id="set-office-y">
         </div>
