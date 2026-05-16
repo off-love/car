@@ -281,7 +281,7 @@ function renderWaypoints() {
     dragHandle.className = 'wp-drag-handle';
     dragHandle.title = '드래그해서 순서 변경';
     dragHandle.setAttribute('aria-label', `${i + 1}번 경유지 순서 변경`);
-    dragHandle.textContent = '⋮⋮';
+    dragHandle.innerHTML = '<span class="wp-drag-arrow up"></span><span class="wp-drag-arrow down"></span>';
     dragHandle.addEventListener('pointerdown', e => {
       if (e.button !== 0) return;
       e.preventDefault();
@@ -402,14 +402,15 @@ function renderWaypoints() {
     const mkBtn = (emoji, cls, title, fn) => {
       const b = document.createElement('button');
       b.className = `wp-btn ${cls}`; b.title = title; b.textContent = emoji;
+      b.setAttribute('aria-label', title);
       b.tabIndex = -1; // 탭 이동 제외
       b.addEventListener('click', fn); return b;
     };
     btns.append(
-      mkBtn('✕', 'del', '삭제', () => removeWp(i))
+      mkBtn('−', 'del', '삭제', () => removeWp(i))
     );
 
-    li.append(dragHandle, num, input, searchBtn, btns);
+    li.append(num, input, searchBtn, btns, dragHandle);
     list.appendChild(li);
   });
 }

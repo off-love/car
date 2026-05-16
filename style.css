@@ -290,32 +290,58 @@ table .col-action {
 }
 
 .wp-drag-handle {
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
+  width: 18px;
+  align-self: stretch;
+  min-height: 32px;
+  padding: 3px 0;
+  border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-sub);
-  font-size: 13px;
-  line-height: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   flex-shrink: 0;
   cursor: grab;
   touch-action: none;
-  transition: background .15s, color .15s, border-color .15s;
+  transition: background .15s, border-color .15s;
 }
 
 .wp-drag-handle:hover,
 .wp-drag-handle:focus-visible {
-  background: var(--teal-light);
-  border-color: var(--teal);
-  color: var(--teal);
+  background: #f3f4f6;
+  border-color: #d1d5db;
 }
 
 .wp-drag-handle:active {
   cursor: grabbing;
+}
+
+.wp-drag-arrow {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  transition: border-color .15s;
+}
+
+.wp-drag-arrow.up {
+  border-bottom: 7px solid #c7c7c7;
+}
+
+.wp-drag-arrow.down {
+  border-top: 7px solid #c7c7c7;
+}
+
+.wp-drag-handle:hover .wp-drag-arrow.up,
+.wp-drag-handle:focus-visible .wp-drag-arrow.up {
+  border-bottom-color: #8b8b8b;
+}
+
+.wp-drag-handle:hover .wp-drag-arrow.down,
+.wp-drag-handle:focus-visible .wp-drag-arrow.down {
+  border-top-color: #8b8b8b;
 }
 
 @keyframes fadeIn {
@@ -408,12 +434,13 @@ table .col-action {
 }
 
 .wp-btn {
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--white);
-  font-size: 10px;
+  font-size: 16px;
+  line-height: 1;
   color: var(--text-sub);
   display: flex;
   align-items: center;
