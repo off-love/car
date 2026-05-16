@@ -122,6 +122,7 @@ function loadDaumPostcode() {
 }
 
 let tesseractLoadPromise;
+let ocrPreviewUrl = '';
 function loadTesseract() {
   if (window.Tesseract) return Promise.resolve(window.Tesseract);
   if (tesseractLoadPromise) return tesseractLoadPromise;
@@ -514,6 +515,16 @@ function resetOcrModal() {
   document.getElementById('ocr-address-list').innerHTML = '';
   document.getElementById('ocr-empty').style.display = 'none';
   document.getElementById('btn-apply-ocr-addresses').disabled = true;
+  document.getElementById('ocr-file-input').value = '';
+  document.getElementById('ocr-source-meta').textContent = '붙여넣기 / 드래그 / 파일 선택';
+  document.getElementById('ocr-drop-zone').classList.remove('drag-over', 'processing');
+  const preview = document.getElementById('ocr-preview');
+  preview.style.display = 'none';
+  preview.removeAttribute('src');
+  if (ocrPreviewUrl) {
+    URL.revokeObjectURL(ocrPreviewUrl);
+    ocrPreviewUrl = '';
+  }
   setOcrProgress(null);
 }
 
@@ -523,45 +534,54 @@ function updateOcrApplyState() {
   document.getElementById('btn-apply-ocr-addresses').disabled = !hasAddress;
 }
 
-async function captureScreenFrame() {
-  const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-  try {
-    const video = document.createElement('video');
-    video.muted = true;
-    video.playsInline = true;
-    video.srcObject = stream;
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('캡처 화면을 읽지 못했습니다')), 5000);
-      const ready = () => {
-        if (!video.videoWidth || !video.videoHeight) return;
-        clearTimeout(timer);
-        resolve();
-      };
-      video.onloadedmetadata = ready;
-      video.oncanplay = ready;
-      video.onerror = () => {
-        clearTimeout(timer);
-        reject(new Error('캡처 화면을 읽지 못했습니다'));
-      };
-      video.play().then(ready).catch(err => {
-        clearTimeout(timer);
-        reject(err);
-      });
-    });
-    if (video.requestVideoFrameCallback) {
-      await new Promise(resolve => video.requestVideoFrameCallback(resolve));
-    } else {
-      await new Promise(resolve => requestAnimationFrame(resolve));
-    }
+function setOcrProcessing(processing) {
+  document.getElementById('ocr-drop-zone').classList.toggle('processing', processing);
+  document.getElementById('btn-ocr-pick-file').disabled = processing;
+  document.getElementById('btn-ocr-recapture').disabled = processing;
+}
 
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas;
-  } finally {
-    stream.getTracks().forEach(track => track.stop());
+function showOcrPreview(file) {
+  const preview = document.getElementById('ocr-preview');
+  if (ocrPreviewUrl) URL.revokeObjectURL(ocrPreviewUrl);
+  ocrPreviewUrl = URL.createObjectURL(file);
+  preview.src = ocrPreviewUrl;
+  preview.style.display = '';
+  document.getElementById('ocr-source-meta').textContent = file.name || '클립보드 이미지';
+}
+
+async function imageFileToCanvas(file) {
+  const maxSide = 2400;
+  let width, height, drawSource, closeSource;
+
+  if (window.createImageBitmap) {
+    const bitmap = await createImageBitmap(file);
+    width = bitmap.width;
+    height = bitmap.height;
+    drawSource = bitmap;
+    closeSource = () => bitmap.close?.();
+  } else {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('이미지를 읽지 못했습니다'));
+      image.src = url;
+    }).finally(() => URL.revokeObjectURL(url));
+    width = img.naturalWidth;
+    height = img.naturalHeight;
+    drawSource = img;
+    closeSource = null;
   }
+
+  if (!width || !height) throw new Error('이미지를 읽지 못했습니다');
+
+  const scale = Math.min(1, maxSide / Math.max(width, height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  canvas.getContext('2d').drawImage(drawSource, 0, 0, canvas.width, canvas.height);
+  closeSource?.();
+  return canvas;
 }
 
 function cleanOcrAddressLine(line) {
@@ -642,19 +662,42 @@ function renderOcrCandidates(candidates) {
   });
 }
 
-async function startOcrCapture() {
-  if (!navigator.mediaDevices?.getDisplayMedia) {
-    toast('이 브라우저에서는 화면 캡처를 사용할 수 없습니다', 3500);
+function openOcrImport() {
+  resetOcrModal();
+  setOcrStatus('이미지를 넣으면 주소를 인식합니다');
+  openModal('modal-ocr');
+  setTimeout(() => document.getElementById('ocr-drop-zone')?.focus(), 0);
+}
+
+function getImageFromPaste(e) {
+  const items = Array.from(e.clipboardData?.items || []);
+  const imageItem = items.find(item => item.type.startsWith('image/'));
+  return imageItem?.getAsFile() || null;
+}
+
+function openOcrFilePicker() {
+  const input = document.getElementById('ocr-file-input');
+  input.value = '';
+  input.click();
+}
+
+async function processOcrImage(file) {
+  if (!file) return;
+  if (file.type && !file.type.startsWith('image/')) {
+    toast('이미지 파일만 사용할 수 있습니다', 3000);
     return;
   }
 
-  resetOcrModal();
-  setOcrStatus('캡처할 화면을 선택해주세요');
-  toast('캡처할 화면을 선택해주세요', 2500);
+  S.ocrCandidates = [];
+  document.getElementById('ocr-address-list').innerHTML = '';
+  document.getElementById('ocr-empty').style.display = 'none';
+  document.getElementById('btn-apply-ocr-addresses').disabled = true;
+  showOcrPreview(file);
+  setOcrProgress(.04);
+  setOcrProcessing(true);
 
   try {
-    const canvas = await captureScreenFrame();
-    openModal('modal-ocr');
+    const canvas = await imageFileToCanvas(file);
     setOcrStatus('OCR 준비 중...');
     const Tesseract = await loadTesseract();
 
@@ -674,14 +717,11 @@ async function startOcrCapture() {
     renderOcrCandidates(candidates);
   } catch (err) {
     setOcrProgress(null);
-    if (err?.name === 'NotAllowedError') {
-      toast('이미지 캡처가 취소되었습니다');
-    } else {
-      openModal('modal-ocr');
-      console.error('OCR capture failed:', err);
-      setOcrStatus('이미지 인식에 실패했습니다');
-      toast(err?.message || '이미지 인식에 실패했습니다', 4000);
-    }
+    console.error('OCR image import failed:', err);
+    setOcrStatus('이미지 인식에 실패했습니다');
+    toast(err?.message || '이미지 인식에 실패했습니다', 4000);
+  } finally {
+    setOcrProcessing(false);
   }
 }
 
@@ -1340,8 +1380,41 @@ document.getElementById('btn-settings').addEventListener('click', openSettings);
 document.getElementById('btn-help').addEventListener('click', () => openModal('modal-help'));
 document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
 document.getElementById('btn-add-wp').addEventListener('click', addWp);
-document.getElementById('btn-ocr-capture').addEventListener('click', startOcrCapture);
-document.getElementById('btn-ocr-recapture').addEventListener('click', startOcrCapture);
+document.getElementById('btn-ocr-capture').addEventListener('click', openOcrImport);
+document.getElementById('btn-ocr-pick-file').addEventListener('click', e => {
+  e.stopPropagation();
+  openOcrFilePicker();
+});
+document.getElementById('btn-ocr-recapture').addEventListener('click', openOcrFilePicker);
+document.getElementById('ocr-file-input').addEventListener('change', e => processOcrImage(e.target.files?.[0]));
+document.getElementById('ocr-drop-zone').addEventListener('click', e => {
+  if (e.target.closest('button')) return;
+  openOcrFilePicker();
+});
+document.getElementById('ocr-drop-zone').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  openOcrFilePicker();
+});
+document.getElementById('ocr-drop-zone').addEventListener('dragover', e => {
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+});
+document.getElementById('ocr-drop-zone').addEventListener('dragleave', e => {
+  if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove('drag-over');
+});
+document.getElementById('ocr-drop-zone').addEventListener('drop', e => {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  processOcrImage(Array.from(e.dataTransfer?.files || []).find(file => file.type.startsWith('image/')));
+});
+document.addEventListener('paste', e => {
+  if (!document.getElementById('modal-ocr').classList.contains('open')) return;
+  const file = getImageFromPaste(e);
+  if (!file) return;
+  e.preventDefault();
+  processOcrImage(file);
+});
 document.getElementById('btn-apply-ocr-addresses').addEventListener('click', applyOcrAddresses);
 document.getElementById('btn-reset').addEventListener('click', () => {
   if (confirm('경유지를 초기화하시겠습니까?')) resetWaypoints();

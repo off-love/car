@@ -235,7 +235,17 @@
         <button class="modal-close" data-close="modal-ocr">✕</button>
       </div>
       <div class="modal-body">
-        <div class="ocr-status" id="ocr-status">캡처를 시작합니다</div>
+        <div class="ocr-source" id="ocr-drop-zone" tabindex="0" role="button" aria-label="캡처 이미지 붙여넣기 또는 파일 선택">
+          <input type="file" id="ocr-file-input" accept="image/*" hidden>
+          <div class="ocr-source-icon">📷</div>
+          <div class="ocr-source-copy">
+            <strong>캡처 이미지</strong>
+            <span id="ocr-source-meta">붙여넣기 / 드래그 / 파일 선택</span>
+          </div>
+          <button type="button" class="ocr-file-button" id="btn-ocr-pick-file">파일 선택</button>
+        </div>
+        <img class="ocr-preview" id="ocr-preview" alt="" style="display:none">
+        <div class="ocr-status" id="ocr-status">이미지를 넣으면 주소를 인식합니다</div>
         <div class="ocr-progress" id="ocr-progress" style="display:none">
           <div class="ocr-progress-bar" id="ocr-progress-bar"></div>
         </div>
@@ -243,7 +253,7 @@
         <ol class="ocr-address-list" id="ocr-address-list"></ol>
       </div>
       <div class="modal-footer">
-        <button class="btn-ghost" id="btn-ocr-recapture">다시 캡처</button>
+        <button class="btn-ghost" id="btn-ocr-recapture">다시 선택</button>
         <button class="btn-primary" id="btn-apply-ocr-addresses" disabled>주소 적용</button>
       </div>
     </div>
