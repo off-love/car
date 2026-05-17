@@ -6,13 +6,20 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>차도리 - 차량 운행 도우미 리포트</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.css">
-  <link rel="stylesheet" href="style.css?v=20260517-ux6">
+  <link rel="stylesheet" href="style.css?v=20260517-weather2">
 </head>
 
 <body>
 
   <header id="app-header">
     <h1><span class="brand-name">차도리</span> <span class="header-sub"><span class="name-mark">차</span>량 운행 <span class="name-mark">도</span>우미 <span class="name-mark">리</span>포트</span></h1>
+    <div id="header-weather" class="header-weather" hidden aria-live="polite">
+      <div class="weather-today">
+        <span class="weather-label">오늘</span>
+        <span id="weather-hourly" class="weather-hourly"></span>
+      </div>
+      <div id="weather-tomorrow" class="weather-tomorrow"></div>
+    </div>
     <div class="header-btns">
       <button id="btn-help" class="btn-header-ghost"><span class="ui-icon icon-help" aria-hidden="true"></span> 도움말</button>
       <button id="btn-settings" class="btn-header"><span class="ui-icon icon-settings" aria-hidden="true"></span> 설정</button>
@@ -175,6 +182,17 @@
         </div>
 
         <div class="setting-section">
+          <div class="setting-title">상단 날씨</div>
+          <div class="toggle-row weather-setting-row">
+            <label class="toggle">
+              <input type="checkbox" id="set-weather-enabled">
+              <span class="toggle-slider"></span>
+            </label>
+            <span>상단 헤더 날씨 표시</span>
+          </div>
+        </div>
+
+        <div class="setting-section">
           <div class="setting-title">기본 지역 필터</div>
           <div class="setting-desc">주소 검색 시 기본으로 적용할 지역을 선택하세요. 동일한 지번이 여러 지역에 있을 때 유용합니다.</div>
           <select id="set-default-region" class="setting-input">
@@ -305,7 +323,7 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260517-ux6"></script>
+  <script src="app.js?v=20260517-weather2"></script>
 </body>
 
 </html>

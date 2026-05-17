@@ -14,7 +14,8 @@ const S = {
     jsKey: KAKAO_JS_KEY, restKey: KAKAO_REST_KEY,
     officeAddr: '', officeX: '', officeY: '',
     fixOffice: true, driver: '', vehicle: '',
-    defaultRegion: '' // 기본 지역 필터
+    defaultRegion: '', // 기본 지역 필터
+    weatherEnabled: false
   },
   waypoints: [], // [{id,address,x,y,region}]
   segments: [],  // [{from,to,fromAddr,toAddr,distance,duration}]
@@ -27,7 +28,8 @@ const S = {
   ocrCandidates: [],
   pendingWpIdx: null,    // 주소 검색 대상 waypoint index
   pendingPostcodeData: null, // 중복 주소 확인 대기 데이터
-  kakaoLoaded: false
+  kakaoLoaded: false,
+  weatherRequestId: 0
 };
 
 const REGIONS = [
@@ -37,6 +39,9 @@ const REGIONS = [
   ['충남', '충청남도'], ['전북', '전라북도'], ['전남', '전라남도'],
   ['경북', '경상북도'], ['경남', '경상남도'], ['제주', '제주']
 ];
+
+const WEATHER_HOURLY_LIMIT = 6;
+const WEATHER_ICON_KINDS = new Set(['clear', 'cloud', 'overcast']);
 
 // ============================================================
 // STORAGE
@@ -65,6 +70,187 @@ function toast(msg, dur = 2000) {
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// ============================================================
+// HEADER WEATHER
+// ============================================================
+function getSeoulDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const pick = type => parts.find(part => part.type === type)?.value || '';
+  return `${pick('year')}-${pick('month')}-${pick('day')}`;
+}
+
+function parseSeoulTime(value) {
+  return new Date(`${value}+09:00`);
+}
+
+function getWeatherKind(code, precipProbability = 0) {
+  const c = Number(code);
+  const p = Number(precipProbability) || 0;
+  if ([95, 96, 99].includes(c)) return 'storm';
+  if ([71, 73, 75, 77, 85, 86].includes(c)) return 'snow';
+  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(c)) return 'rain';
+  if ([45, 48].includes(c)) return 'fog';
+  if (p >= 60) return 'rain';
+  if (c === 3) return 'overcast';
+  if ([1, 2].includes(c)) return 'cloud';
+  if (c === 0) return 'clear';
+  return 'unknown';
+}
+
+function getWeatherText(code, precipProbability = 0) {
+  const kind = getWeatherKind(code, precipProbability);
+  return {
+    storm: '뇌우',
+    snow: '눈',
+    rain: '비',
+    fog: '안개',
+    overcast: '흐림',
+    cloud: '구름',
+    clear: '맑음',
+    unknown: '날씨'
+  }[kind];
+}
+
+function createWeatherDesc(code, precipProbability = 0) {
+  const kind = getWeatherKind(code, precipProbability);
+  const text = getWeatherText(code, precipProbability);
+  const el = document.createElement('span');
+  if (WEATHER_ICON_KINDS.has(kind)) {
+    el.className = `weather-icon weather-icon-${kind}`;
+    el.setAttribute('aria-label', text);
+    el.title = text;
+  } else {
+    el.className = 'weather-desc';
+    el.textContent = text;
+  }
+  return el;
+}
+
+function formatTemp(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? Math.round(num) : '-';
+}
+
+function hideHeaderWeather() {
+  const weatherEl = document.getElementById('header-weather');
+  if (!weatherEl) return;
+  weatherEl.hidden = true;
+  document.getElementById('weather-hourly')?.replaceChildren();
+  const tomorrowEl = document.getElementById('weather-tomorrow');
+  if (tomorrowEl) tomorrowEl.textContent = '';
+}
+
+function renderHeaderWeather(data) {
+  const weatherEl = document.getElementById('header-weather');
+  const hourlyEl = document.getElementById('weather-hourly');
+  const tomorrowEl = document.getElementById('weather-tomorrow');
+  if (!weatherEl || !hourlyEl || !tomorrowEl) return;
+
+  const now = new Date();
+  const todayKey = getSeoulDateKey(now);
+  const tomorrowKey = getSeoulDateKey(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+  const times = data.hourly?.time || [];
+  const temps = data.hourly?.temperature_2m || [];
+  const codes = data.hourly?.weather_code || [];
+  const probabilities = data.hourly?.precipitation_probability || [];
+  const remainingToday = times
+    .map((time, i) => ({
+      date: parseSeoulTime(time),
+      temp: temps[i],
+      code: codes[i],
+      probability: probabilities[i]
+    }))
+    .filter(item => getSeoulDateKey(item.date) === todayKey && item.date >= now)
+    .slice(0, WEATHER_HOURLY_LIMIT);
+
+  hourlyEl.replaceChildren();
+  if (!remainingToday.length) {
+    const empty = document.createElement('span');
+    empty.className = 'weather-hour';
+    empty.textContent = '남은 예보 없음';
+    hourlyEl.append(empty);
+  } else {
+    remainingToday.forEach(item => {
+      const hour = item.date.getHours();
+      const probability = Number(item.probability) || 0;
+      const chip = document.createElement('span');
+      chip.className = 'weather-hour';
+
+      const timeEl = document.createElement('span');
+      timeEl.className = 'weather-time';
+      timeEl.textContent = `${hour}시`;
+
+      const tempEl = document.createElement('span');
+      tempEl.textContent = `${formatTemp(item.temp)}°`;
+
+      chip.append(timeEl, createWeatherDesc(item.code, probability), tempEl);
+      if (probability >= 30) {
+        const rainEl = document.createElement('span');
+        rainEl.textContent = `${Math.round(probability)}%`;
+        chip.append(rainEl);
+      }
+      hourlyEl.append(chip);
+    });
+  }
+
+  const daily = data.daily || {};
+  const tomorrowIdx = (daily.time || []).indexOf(tomorrowKey);
+  const idx = tomorrowIdx >= 0 ? tomorrowIdx : 1;
+  const maxTemp = formatTemp(daily.temperature_2m_max?.[idx]);
+  const minTemp = formatTemp(daily.temperature_2m_min?.[idx]);
+  tomorrowEl.replaceChildren();
+  tomorrowEl.append('내일 ', createWeatherDesc(daily.weather_code?.[idx], daily.precipitation_probability_max?.[idx]), ` ${maxTemp}/${minTemp}°`);
+  weatherEl.hidden = false;
+}
+
+async function updateHeaderWeather() {
+  const reqId = ++S.weatherRequestId;
+
+  if (!S.settings.weatherEnabled) {
+    hideHeaderWeather();
+    return;
+  }
+
+  const latitude = Number(S.settings.officeY);
+  const longitude = Number(S.settings.officeX);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    hideHeaderWeather();
+    return;
+  }
+
+  const hourlyEl = document.getElementById('weather-hourly');
+  const weatherEl = document.getElementById('header-weather');
+  if (weatherEl && hourlyEl) {
+    weatherEl.hidden = false;
+    hourlyEl.textContent = '날씨 불러오는 중';
+  }
+
+  const params = new URLSearchParams({
+    latitude,
+    longitude,
+    hourly: 'temperature_2m,precipitation_probability,weather_code',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+    timezone: 'Asia/Seoul',
+    forecast_days: '2'
+  });
+
+  try {
+    const resp = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    if (!resp.ok) throw new Error(`Open-Meteo ${resp.status}`);
+    const data = await resp.json();
+    if (reqId !== S.weatherRequestId) return;
+    renderHeaderWeather(data);
+  } catch (e) {
+    console.warn('Weather load failed:', e);
+    if (reqId === S.weatherRequestId) hideHeaderWeather();
+  }
 }
 
 // ============================================================
@@ -1335,6 +1521,7 @@ function openSettings() {
   document.getElementById('set-office-x').value = st.officeX || '';
   document.getElementById('set-office-y').value = st.officeY || '';
   document.getElementById('set-fix-office').checked = st.fixOffice !== false;
+  document.getElementById('set-weather-enabled').checked = !!st.weatherEnabled;
   document.getElementById('set-default-region').value = st.defaultRegion || '';
   updateOfficeAddressPicker(st.officeAddr || '');
   openModal('modal-settings');
@@ -1345,6 +1532,7 @@ async function saveSettings() {
   const officeX = document.getElementById('set-office-x').value;
   const officeY = document.getElementById('set-office-y').value;
   const fixOffice = document.getElementById('set-fix-office').checked;
+  const weatherEnabled = document.getElementById('set-weather-enabled').checked;
   const defaultRegion = document.getElementById('set-default-region').value;
 
   if (fixOffice && !officeAddr) {
@@ -1353,11 +1541,18 @@ async function saveSettings() {
     return;
   }
 
+  if (weatherEnabled && (!officeAddr || !officeX || !officeY)) {
+    toast('날씨 표시는 사무실 주소 좌표가 필요합니다');
+    document.getElementById('btn-search-office').classList.add('needs-attention');
+    return;
+  }
+
   // API 키는 코드에 고정된 상수 사용
-  S.settings = { jsKey: KAKAO_JS_KEY, restKey: KAKAO_REST_KEY, officeAddr, officeX, officeY, fixOffice, defaultRegion };
+  S.settings = { jsKey: KAKAO_JS_KEY, restKey: KAKAO_REST_KEY, officeAddr, officeX, officeY, fixOffice, defaultRegion, weatherEnabled };
   save('drvlog_settings', S.settings);
 
   updateFixedStops();
+  updateHeaderWeather();
   closeModal('modal-settings');
   toast('설정이 저장되었습니다');
 }
@@ -1503,10 +1698,12 @@ document.getElementById('btn-reset-settings').addEventListener('click', () => {
       jsKey: KAKAO_JS_KEY, restKey: KAKAO_REST_KEY,
       officeAddr: '', officeX: '', officeY: '',
       fixOffice: true, driver: '', vehicle: '',
-      defaultRegion: ''
+      defaultRegion: '',
+      weatherEnabled: false
     };
     openSettings(); // UI 갱신을 위해 다시 열기
     updateFixedStops();
+    updateHeaderWeather();
     toast('설정이 초기화되었습니다');
   }
 });
@@ -1532,6 +1729,7 @@ document.addEventListener('click', e => {
 async function init() {
   loadAll();
   updateFixedStops();
+  updateHeaderWeather();
   renderSavedRoutes();
   resetWaypoints();
 
