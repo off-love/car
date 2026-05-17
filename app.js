@@ -42,6 +42,8 @@ const REGIONS = [
 
 const WEATHER_HOURLY_LIMIT = 6;
 const WEATHER_ICON_KINDS = new Set(['clear', 'cloud', 'overcast']);
+const WEATHER_FORECAST_TIMEOUT_MS = 7000;
+const WEATHER_LOCATION_TIMEOUT_MS = 3500;
 
 // ============================================================
 // STORAGE
@@ -90,6 +92,16 @@ function parseSeoulTime(value) {
   return new Date(`${value}+09:00`);
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 7000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function getShortRegionName(region) {
   const names = {
     서울특별시: '서울',
@@ -135,9 +147,11 @@ async function getWeatherLocationLabel(latitude, longitude) {
 
   try {
     const params = new URLSearchParams({ x: longitude, y: latitude });
-    const resp = await fetch(`https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?${params}`, {
-      headers: { Authorization: `KakaoAK ${restKey}` }
-    });
+    const resp = await fetchWithTimeout(
+      `https://dapi.kakao.com/v2/local/geo/coord2regioncode.json?${params}`,
+      { headers: { Authorization: `KakaoAK ${restKey}` } },
+      WEATHER_LOCATION_TIMEOUT_MS
+    );
     if (!resp.ok) throw new Error(`Kakao region ${resp.status}`);
     const json = await resp.json();
     const docs = json.documents || [];
@@ -209,6 +223,40 @@ function hideHeaderWeather() {
   if (tomorrowEl) tomorrowEl.textContent = '';
 }
 
+function renderHeaderWeatherLoading(locationLabel) {
+  const weatherEl = document.getElementById('header-weather');
+  const locationEl = document.getElementById('weather-location');
+  const hourlyEl = document.getElementById('weather-hourly');
+  const tomorrowEl = document.getElementById('weather-tomorrow');
+  if (!weatherEl || !locationEl || !hourlyEl || !tomorrowEl) return;
+
+  weatherEl.hidden = false;
+  locationEl.textContent = locationLabel || '날씨';
+  hourlyEl.replaceChildren();
+  const loading = document.createElement('span');
+  loading.className = 'weather-status';
+  loading.textContent = '날씨 불러오는 중';
+  hourlyEl.append(loading);
+  tomorrowEl.replaceChildren();
+}
+
+function renderHeaderWeatherError(locationLabel) {
+  const weatherEl = document.getElementById('header-weather');
+  const locationEl = document.getElementById('weather-location');
+  const hourlyEl = document.getElementById('weather-hourly');
+  const tomorrowEl = document.getElementById('weather-tomorrow');
+  if (!weatherEl || !locationEl || !hourlyEl || !tomorrowEl) return;
+
+  weatherEl.hidden = false;
+  locationEl.textContent = locationLabel || '날씨';
+  hourlyEl.replaceChildren();
+  const error = document.createElement('span');
+  error.className = 'weather-status weather-status-error';
+  error.textContent = '예보를 불러오지 못했습니다';
+  hourlyEl.append(error);
+  tomorrowEl.replaceChildren();
+}
+
 function renderHeaderWeather(data, locationLabel) {
   const weatherEl = document.getElementById('header-weather');
   const locationEl = document.getElementById('weather-location');
@@ -237,30 +285,40 @@ function renderHeaderWeather(data, locationLabel) {
   locationEl.textContent = locationLabel || getWeatherLocationFromAddress(S.settings.officeAddr) || '날씨';
   if (!remainingToday.length) {
     const empty = document.createElement('span');
-    empty.className = 'weather-hour';
+    empty.className = 'weather-status';
     empty.textContent = '남은 예보 없음';
     hourlyEl.append(empty);
   } else {
+    const axis = document.createElement('div');
+    axis.className = 'weather-axis-stack';
+    ['시간', '날씨', '기온'].forEach(label => {
+      const item = document.createElement('span');
+      item.textContent = label;
+      axis.append(item);
+    });
+    hourlyEl.append(axis);
+
     remainingToday.forEach(item => {
       const hour = item.date.getHours();
       const probability = Number(item.probability) || 0;
-      const chip = document.createElement('span');
-      chip.className = 'weather-hour';
+      const col = document.createElement('div');
+      col.className = 'weather-hour-column';
+      if (hourlyEl.children.length > 4) col.classList.add('hide-compact');
 
       const timeEl = document.createElement('span');
       timeEl.className = 'weather-time';
       timeEl.textContent = `${hour}시`;
 
+      const iconWrap = document.createElement('span');
+      iconWrap.className = 'weather-icon-cell';
+      iconWrap.append(createWeatherDesc(item.code, probability));
+
       const tempEl = document.createElement('span');
+      tempEl.className = 'weather-temp-cell';
       tempEl.textContent = `${formatTemp(item.temp)}°`;
 
-      chip.append(timeEl, createWeatherDesc(item.code, probability), tempEl);
-      if (probability >= 30) {
-        const rainEl = document.createElement('span');
-        rainEl.textContent = `${Math.round(probability)}%`;
-        chip.append(rainEl);
-      }
-      hourlyEl.append(chip);
+      col.append(timeEl, iconWrap, tempEl);
+      hourlyEl.append(col);
     });
   }
 
@@ -270,7 +328,16 @@ function renderHeaderWeather(data, locationLabel) {
   const maxTemp = formatTemp(daily.temperature_2m_max?.[idx]);
   const minTemp = formatTemp(daily.temperature_2m_min?.[idx]);
   tomorrowEl.replaceChildren();
-  tomorrowEl.append('내일 ', createWeatherDesc(daily.weather_code?.[idx], daily.precipitation_probability_max?.[idx]), ` ${maxTemp}/${minTemp}°`);
+  const tomorrowLabel = document.createElement('span');
+  tomorrowLabel.className = 'weather-tomorrow-label';
+  tomorrowLabel.textContent = '내일';
+  const tomorrowIcon = document.createElement('span');
+  tomorrowIcon.className = 'weather-icon-cell';
+  tomorrowIcon.append(createWeatherDesc(daily.weather_code?.[idx], daily.precipitation_probability_max?.[idx]));
+  const tomorrowTemp = document.createElement('span');
+  tomorrowTemp.className = 'weather-tomorrow-temp';
+  tomorrowTemp.textContent = `${maxTemp}/${minTemp}°`;
+  tomorrowEl.append(tomorrowLabel, tomorrowIcon, tomorrowTemp);
   weatherEl.hidden = false;
 }
 
@@ -289,14 +356,15 @@ async function updateHeaderWeather() {
     return;
   }
 
-  const locationEl = document.getElementById('weather-location');
-  const hourlyEl = document.getElementById('weather-hourly');
-  const weatherEl = document.getElementById('header-weather');
-  if (weatherEl && hourlyEl) {
-    weatherEl.hidden = false;
-    if (locationEl) locationEl.textContent = getWeatherLocationFromAddress(S.settings.officeAddr);
-    hourlyEl.textContent = '날씨 불러오는 중';
-  }
+  const fallbackLocation = getWeatherLocationFromAddress(S.settings.officeAddr);
+  renderHeaderWeatherLoading(fallbackLocation);
+  let locationLabel = fallbackLocation;
+  getWeatherLocationLabel(latitude, longitude).then(label => {
+    if (reqId !== S.weatherRequestId || !label) return;
+    locationLabel = label;
+    const locationEl = document.getElementById('weather-location');
+    if (locationEl) locationEl.textContent = label;
+  });
 
   const params = new URLSearchParams({
     latitude,
@@ -308,17 +376,18 @@ async function updateHeaderWeather() {
   });
 
   try {
-    const [resp, locationLabel] = await Promise.all([
-      fetch(`https://api.open-meteo.com/v1/forecast?${params}`),
-      getWeatherLocationLabel(latitude, longitude)
-    ]);
+    const resp = await fetchWithTimeout(
+      `https://api.open-meteo.com/v1/forecast?${params}`,
+      {},
+      WEATHER_FORECAST_TIMEOUT_MS
+    );
     if (!resp.ok) throw new Error(`Open-Meteo ${resp.status}`);
     const data = await resp.json();
     if (reqId !== S.weatherRequestId) return;
     renderHeaderWeather(data, locationLabel);
   } catch (e) {
     console.warn('Weather load failed:', e);
-    if (reqId === S.weatherRequestId) hideHeaderWeather();
+    if (reqId === S.weatherRequestId) renderHeaderWeatherError(locationLabel);
   }
 }
 
