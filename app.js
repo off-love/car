@@ -515,7 +515,7 @@ function resetOcrModal() {
   document.getElementById('ocr-address-list').innerHTML = '';
   document.getElementById('ocr-empty').style.display = 'none';
   document.getElementById('btn-apply-ocr-addresses').disabled = true;
-  document.getElementById('ocr-source-meta').textContent = 'Windows: Ctrl+V · Mac: ⌘V';
+  document.getElementById('ocr-source-meta').textContent = '캡처 후 여기서 Ctrl+V 또는 ⌘V';
   document.getElementById('ocr-drop-zone').classList.remove('processing', 'paste-ready');
   const preview = document.getElementById('ocr-preview');
   preview.style.display = 'none';
@@ -1470,13 +1470,13 @@ document.getElementById('btn-ocr-capture').addEventListener('click', openOcrImpo
 document.getElementById('ocr-drop-zone').addEventListener('click', e => {
   if (e.target.closest('button')) return;
   focusOcrDropZone();
-  setOcrStatus('캡처 이미지를 Ctrl+V 또는 ⌘V로 붙여넣어 주세요');
+  setOcrStatus('캡처한 이미지를 이 창에서 Ctrl+V 또는 ⌘V로 붙여넣어 주세요');
 });
 document.getElementById('ocr-drop-zone').addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   e.preventDefault();
   focusOcrDropZone();
-  setOcrStatus('캡처 이미지를 Ctrl+V 또는 ⌘V로 붙여넣어 주세요');
+  setOcrStatus('캡처한 이미지를 이 창에서 Ctrl+V 또는 ⌘V로 붙여넣어 주세요');
 });
 document.addEventListener('paste', e => {
   if (!document.getElementById('modal-ocr').classList.contains('open')) return;

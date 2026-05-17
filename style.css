@@ -112,33 +112,37 @@ textarea {
 }
 
 #app-header h1 {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -.3px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .header-sub {
   font-size: 12px;
-  font-weight: 400;
-  opacity: .65;
+  font-weight: 500;
+  opacity: .72;
   letter-spacing: 0;
 }
 
-.brand-mark {
-  width: 25px;
-  height: 25px;
+.brand-name {
+  min-width: 92px;
+  height: 30px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--teal), var(--blue));
+  background: rgba(255, 255, 255, .12);
+  border: 1px solid rgba(255, 255, 255, .24);
   color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 17px;
   font-weight: 900;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28);
+  letter-spacing: 4px;
+  padding-left: 4px;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .22);
+  box-shadow: inset 0 -2px 0 rgba(3, 199, 90, .65);
 }
 
 .header-btns {
@@ -885,7 +889,7 @@ table .col-action {
 #right-scroll {
   overflow-y: auto;
   flex: 1;
-  padding: 14px 14px 14px 6px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -964,6 +968,15 @@ table .col-action {
   object-position: center;
   display: block;
   mix-blend-mode: multiply;
+}
+
+#saved-routes-section,
+#results-card,
+#results-placeholder {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 /* ─── TOAST ─── */
@@ -1155,6 +1168,63 @@ table .col-action {
   white-space: nowrap;
 }
 
+.ocr-capture-guide {
+  margin-bottom: 12px;
+  padding: 13px;
+  border-radius: 8px;
+  border: 1px solid rgba(3, 199, 90, .24);
+  background: linear-gradient(180deg, #FBFEFC, var(--teal-light));
+}
+
+.ocr-guide-title {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 9px;
+}
+
+.ocr-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ocr-guide-item {
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .78);
+  border: 1px solid rgba(215, 222, 232, .85);
+}
+
+.ocr-guide-os {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 7px;
+}
+
+.ocr-guide-item p {
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.ocr-guide-item p + p {
+  margin-top: 5px;
+}
+
+.ocr-guide-item strong {
+  color: var(--blue);
+  font-weight: 800;
+}
+
 .ocr-preview {
   width: 100%;
   max-height: 180px;
@@ -1169,6 +1239,10 @@ table .col-action {
   .ocr-source {
     grid-template-columns: 44px minmax(0, 1fr);
     padding: 14px;
+  }
+
+  .ocr-guide-grid {
+    grid-template-columns: 1fr;
   }
 }
 
