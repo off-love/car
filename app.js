@@ -424,7 +424,7 @@ function renderWaypoints() {
             S.waypoints[latestWpIdx].x = '';
             S.waypoints[latestWpIdx].y = '';
             input.classList.add('error');
-            toast('주소를 찾지 못했습니다. 🔍 버튼으로 직접 검색해보세요', 3000);
+            toast('주소를 찾지 못했습니다. 검색 버튼으로 직접 검색해보세요', 3000);
           }
         } catch {
           const latestWpIdx = getWaypointIndexById(wpId);
@@ -439,11 +439,11 @@ function renderWaypoints() {
       }, 50);
     });
 
-    // 🔍 Daum Postcode 보조 검색 버튼
+    // Daum Postcode 보조 검색 버튼
     const searchBtn = document.createElement('button');
     searchBtn.className = 'wp-search-btn';
     searchBtn.title = '주소 검색 (팝업)';
-    searchBtn.textContent = '🔍';
+    searchBtn.innerHTML = '<span class="ui-icon icon-search" aria-hidden="true"></span>';
     searchBtn.tabIndex = -1; // 탭 이동 제외
     searchBtn.addEventListener('click', () => openAddressSearch(i));
 
@@ -515,9 +515,8 @@ function resetOcrModal() {
   document.getElementById('ocr-address-list').innerHTML = '';
   document.getElementById('ocr-empty').style.display = 'none';
   document.getElementById('btn-apply-ocr-addresses').disabled = true;
-  document.getElementById('ocr-file-input').value = '';
-  document.getElementById('ocr-source-meta').textContent = 'Ctrl+V / ⌘V / 드래그 / 파일 선택';
-  document.getElementById('ocr-drop-zone').classList.remove('drag-over', 'processing');
+  document.getElementById('ocr-source-meta').textContent = 'Windows: Ctrl+V · Mac: ⌘V';
+  document.getElementById('ocr-drop-zone').classList.remove('processing', 'paste-ready');
   const preview = document.getElementById('ocr-preview');
   preview.style.display = 'none';
   preview.removeAttribute('src');
@@ -536,9 +535,7 @@ function updateOcrApplyState() {
 
 function setOcrProcessing(processing) {
   document.getElementById('ocr-drop-zone').classList.toggle('processing', processing);
-  document.getElementById('btn-ocr-pick-file').disabled = processing;
-  document.getElementById('btn-ocr-paste').disabled = processing;
-  document.getElementById('btn-ocr-recapture').disabled = processing;
+  document.getElementById('btn-apply-ocr-addresses').disabled = processing || !document.querySelector('.ocr-address-input');
 }
 
 function showOcrPreview(file) {
@@ -748,7 +745,7 @@ function renderOcrCandidates(candidates) {
 
 function openOcrImport() {
   resetOcrModal();
-  setOcrStatus('캡처 이미지를 붙여넣으면 주소를 인식합니다');
+  setOcrStatus('캡처 이미지를 붙여넣으면 바로 주소를 인식합니다');
   openModal('modal-ocr');
   setTimeout(focusOcrDropZone, 0);
 }
@@ -768,41 +765,6 @@ function getImageFromPaste(e) {
   const items = Array.from(e.clipboardData?.items || []);
   const imageItem = items.find(item => item.type.startsWith('image/'));
   return imageItem?.getAsFile() || null;
-}
-
-async function readImageFromClipboard() {
-  if (!navigator.clipboard?.read) return null;
-  const items = await navigator.clipboard.read();
-  for (const item of items) {
-    const imageType = item.types.find(type => type.startsWith('image/'));
-    if (imageType) return item.getType(imageType);
-  }
-  return null;
-}
-
-async function pasteOcrImageFromClipboard() {
-  focusOcrDropZone();
-  setOcrStatus('클립보드 이미지를 확인 중...');
-
-  try {
-    const file = await readImageFromClipboard();
-    if (file) {
-      await processOcrImage(file);
-      return;
-    }
-    setOcrStatus('캡처 이미지를 Ctrl+V 또는 ⌘V로 붙여넣어 주세요');
-    toast('클립보드에 이미지가 없습니다. 캡처 후 Ctrl+V 또는 ⌘V를 눌러주세요', 3500);
-  } catch (err) {
-    console.warn('Clipboard image read failed:', err);
-    setOcrStatus('캡처 이미지를 Ctrl+V 또는 ⌘V로 붙여넣어 주세요');
-    toast('붙여넣기 영역을 클릭한 뒤 Ctrl+V 또는 ⌘V를 눌러주세요', 3500);
-  }
-}
-
-function openOcrFilePicker() {
-  const input = document.getElementById('ocr-file-input');
-  input.value = '';
-  input.click();
 }
 
 async function processOcrImage(file) {
@@ -1198,7 +1160,7 @@ function renderResults() {
       <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${seg.to}">${seg.to}</td>
       <td><strong>${seg.distance.toFixed(1)}</strong></td>
       <td>${formatDuration(seg.duration || 0)}</td>
-      <td><button class="copy-seg-btn" data-i="${i}" title="도착지명 복사">📋</button></td>
+      <td><button class="copy-seg-btn" data-i="${i}" title="도착지명 복사">복사</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -1242,12 +1204,12 @@ function copyWpAddr(idx) {
   const addr = S.waypoints[idx]?.address;
   if (!addr) { toast('주소가 없습니다'); return; }
   copyText(addr);
-  toast('주소가 복사되었습니다 📋');
+  toast('주소가 복사되었습니다');
   // Visual feedback on button
   const btns = document.querySelectorAll('.wp-btn.cp');
   if (btns[idx]) {
-    btns[idx].textContent = '✅';
-    setTimeout(() => { btns[idx].textContent = '📋'; }, 1500);
+    btns[idx].textContent = '완료';
+    setTimeout(() => { btns[idx].textContent = '복사'; }, 1500);
   }
 }
 
@@ -1259,9 +1221,9 @@ document.getElementById('segments-body').addEventListener('click', e => {
   const seg = S.segments[i];
   if (!seg) return;
   copyText(seg.to); // 도착지명(경유지명)만 복사
-  btn.textContent = '✅';
+  btn.textContent = '완료';
   btn.classList.add('copied');
-  setTimeout(() => { btn.textContent = '📋'; btn.classList.remove('copied'); }, 1500);
+  setTimeout(() => { btn.textContent = '복사'; btn.classList.remove('copied'); }, 1500);
   toast(`복사됨: ${seg.to}`);
 });
 
@@ -1299,7 +1261,7 @@ function saveRoute() {
   if (S.savedRoutes.length > 3) S.savedRoutes = S.savedRoutes.slice(0, 3);
   save('drvlog_saved_routes', S.savedRoutes);
   renderSavedRoutes();
-  toast('경로가 저장되었습니다 💾');
+  toast('경로가 저장되었습니다');
 }
 
 function renderSavedRoutes() {
@@ -1489,7 +1451,7 @@ document.getElementById('btn-search-office').addEventListener('click', async () 
       if (coords) {
         document.getElementById('set-office-x').value = coords.x;
         document.getElementById('set-office-y').value = coords.y;
-        toast('사무실 주소 좌표 설정 완료 ✅');
+        toast('사무실 주소 좌표 설정 완료');
       } else {
         toast('좌표 변환 실패 — REST API 키를 입력 후 다시 시도하세요', 4000);
       }
@@ -1505,16 +1467,6 @@ document.getElementById('btn-help').addEventListener('click', () => openModal('m
 document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
 document.getElementById('btn-add-wp').addEventListener('click', addWp);
 document.getElementById('btn-ocr-capture').addEventListener('click', openOcrImport);
-document.getElementById('btn-ocr-paste').addEventListener('click', e => {
-  e.stopPropagation();
-  pasteOcrImageFromClipboard();
-});
-document.getElementById('btn-ocr-pick-file').addEventListener('click', e => {
-  e.stopPropagation();
-  openOcrFilePicker();
-});
-document.getElementById('btn-ocr-recapture').addEventListener('click', openOcrFilePicker);
-document.getElementById('ocr-file-input').addEventListener('change', e => processOcrImage(e.target.files?.[0]));
 document.getElementById('ocr-drop-zone').addEventListener('click', e => {
   if (e.target.closest('button')) return;
   focusOcrDropZone();
@@ -1523,25 +1475,19 @@ document.getElementById('ocr-drop-zone').addEventListener('click', e => {
 document.getElementById('ocr-drop-zone').addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   e.preventDefault();
-  pasteOcrImageFromClipboard();
-});
-document.getElementById('ocr-drop-zone').addEventListener('dragover', e => {
-  e.preventDefault();
-  e.currentTarget.classList.add('drag-over');
-});
-document.getElementById('ocr-drop-zone').addEventListener('dragleave', e => {
-  if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove('drag-over');
-});
-document.getElementById('ocr-drop-zone').addEventListener('drop', e => {
-  e.preventDefault();
-  e.currentTarget.classList.remove('drag-over');
-  processOcrImage(Array.from(e.dataTransfer?.files || []).find(file => file.type.startsWith('image/')));
+  focusOcrDropZone();
+  setOcrStatus('캡처 이미지를 Ctrl+V 또는 ⌘V로 붙여넣어 주세요');
 });
 document.addEventListener('paste', e => {
   if (!document.getElementById('modal-ocr').classList.contains('open')) return;
   const file = getImageFromPaste(e);
-  if (!file) return;
   e.preventDefault();
+  if (!file) {
+    focusOcrDropZone();
+    setOcrStatus('클립보드에서 이미지를 찾지 못했습니다');
+    toast('캡처 이미지를 복사한 뒤 Ctrl+V 또는 ⌘V로 붙여넣어 주세요', 3500);
+    return;
+  }
   processOcrImage(file);
 });
 document.getElementById('btn-apply-ocr-addresses').addEventListener('click', applyOcrAddresses);
@@ -1598,7 +1544,7 @@ async function init() {
       console.warn('Kakao SDK load failed:', e.message);
     }
   } else {
-    setTimeout(() => { toast('⚙️ 설정에서 사무실 주소를 입력해주세요', 4000); }, 600);
+    setTimeout(() => { toast('설정에서 사무실 주소를 입력해주세요', 4000); }, 600);
     openSettings();
   }
 }
