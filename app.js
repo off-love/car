@@ -276,6 +276,28 @@ function renderHeaderWeatherError(locationLabel) {
   tomorrowEl.replaceChildren();
 }
 
+function createDailyWeatherCard(label, daily, idx) {
+  const card = document.createElement('div');
+  card.className = 'weather-day-card';
+
+  const dayLabel = document.createElement('span');
+  dayLabel.className = 'weather-tomorrow-label';
+  dayLabel.textContent = label;
+
+  const dayIcon = document.createElement('span');
+  dayIcon.className = 'weather-icon-cell';
+  dayIcon.append(createWeatherDesc(daily.weather_code?.[idx], daily.precipitation_probability_max?.[idx]));
+
+  const maxTemp = formatTemp(daily.temperature_2m_max?.[idx]);
+  const minTemp = formatTemp(daily.temperature_2m_min?.[idx]);
+  const dayTemp = document.createElement('span');
+  dayTemp.className = 'weather-tomorrow-temp';
+  dayTemp.textContent = `${maxTemp}/${minTemp}°`;
+
+  card.append(dayLabel, dayIcon, dayTemp);
+  return card;
+}
+
 function renderHeaderWeather(data, locationLabel) {
   const weatherEl = document.getElementById('header-weather');
   const locationEl = document.getElementById('weather-location');
@@ -286,6 +308,7 @@ function renderHeaderWeather(data, locationLabel) {
   const now = new Date();
   const todayKey = getSeoulDateKey(now);
   const tomorrowKey = getSeoulDateKey(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+  const dayAfterTomorrowKey = getSeoulDateKey(new Date(now.getTime() + 48 * 60 * 60 * 1000));
   const times = data.hourly?.time || [];
   const temps = data.hourly?.temperature_2m || [];
   const codes = data.hourly?.weather_code || [];
@@ -342,20 +365,14 @@ function renderHeaderWeather(data, locationLabel) {
 
   const daily = data.daily || {};
   const tomorrowIdx = (daily.time || []).indexOf(tomorrowKey);
-  const idx = tomorrowIdx >= 0 ? tomorrowIdx : 1;
-  const maxTemp = formatTemp(daily.temperature_2m_max?.[idx]);
-  const minTemp = formatTemp(daily.temperature_2m_min?.[idx]);
+  const dayAfterTomorrowIdx = (daily.time || []).indexOf(dayAfterTomorrowKey);
+  const tomorrowDailyIdx = tomorrowIdx >= 0 ? tomorrowIdx : 1;
+  const dayAfterTomorrowDailyIdx = dayAfterTomorrowIdx >= 0 ? dayAfterTomorrowIdx : 2;
   tomorrowEl.replaceChildren();
-  const tomorrowLabel = document.createElement('span');
-  tomorrowLabel.className = 'weather-tomorrow-label';
-  tomorrowLabel.textContent = '내일';
-  const tomorrowIcon = document.createElement('span');
-  tomorrowIcon.className = 'weather-icon-cell';
-  tomorrowIcon.append(createWeatherDesc(daily.weather_code?.[idx], daily.precipitation_probability_max?.[idx]));
-  const tomorrowTemp = document.createElement('span');
-  tomorrowTemp.className = 'weather-tomorrow-temp';
-  tomorrowTemp.textContent = `${maxTemp}/${minTemp}°`;
-  tomorrowEl.append(tomorrowLabel, tomorrowIcon, tomorrowTemp);
+  tomorrowEl.append(
+    createDailyWeatherCard('내일', daily, tomorrowDailyIdx),
+    createDailyWeatherCard('모레', daily, dayAfterTomorrowDailyIdx)
+  );
   weatherEl.hidden = false;
 }
 
@@ -390,7 +407,7 @@ async function updateHeaderWeather() {
     hourly: 'temperature_2m,precipitation_probability,weather_code',
     daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
     timezone: 'Asia/Seoul',
-    forecast_days: '2'
+    forecast_days: '3'
   });
 
   try {
