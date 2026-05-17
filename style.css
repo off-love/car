@@ -107,7 +107,7 @@ textarea {
   align-items: center;
   gap: 14px;
   padding: 0 20px;
-  height: 48px;
+  height: 72px;
   box-shadow: 0 1px 8px rgba(4, 17, 37, .26);
   position: sticky;
   top: 0;
@@ -180,13 +180,14 @@ textarea {
 .header-weather {
   grid-column: 2;
   justify-self: center;
-  max-width: min(58vw, 780px);
+  max-width: min(60vw, 820px);
   min-width: 0;
-  height: 32px;
-  display: flex;
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 9px;
-  padding: 4px 10px;
+  gap: 12px;
+  padding: 7px 12px;
   border: 1px solid rgba(255, 255, 255, .22);
   border-radius: 8px;
   background: rgba(255, 255, 255, .10);
@@ -201,12 +202,33 @@ textarea {
 
 .weather-today,
 .weather-hourly,
+.weather-location,
+.weather-lines,
+.weather-row,
 .weather-hour,
 .weather-tomorrow {
   display: inline-flex;
   align-items: center;
 }
 
+.weather-location {
+  align-self: stretch;
+  padding-right: 12px;
+  border-right: 1px solid rgba(255, 255, 255, .24);
+  color: #CFFFE4;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.weather-lines {
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.weather-row,
 .weather-today {
   min-width: 0;
   gap: 7px;
@@ -227,11 +249,11 @@ textarea {
 
 .weather-hour {
   flex-shrink: 0;
-  gap: 3px;
-  padding: 3px 6px;
+  gap: 4px;
+  padding: 3px 7px;
   border-radius: 6px;
   background: rgba(255, 255, 255, .10);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 650;
   line-height: 1;
 }
@@ -273,8 +295,6 @@ textarea {
 .weather-tomorrow {
   flex-shrink: 0;
   gap: 4px;
-  padding-left: 9px;
-  border-left: 1px solid rgba(255, 255, 255, .24);
   color: #fff;
   font-size: 12.5px;
   font-weight: 800;
@@ -329,7 +349,7 @@ textarea {
 #main-grid {
   display: grid;
   grid-template-columns: 320px 1fr 430px;
-  height: calc(100vh - 48px);
+  height: calc(100vh - 72px);
   overflow: hidden;
 }
 

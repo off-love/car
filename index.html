@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>차도리 - 차량 운행 도우미 리포트</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard.css">
-  <link rel="stylesheet" href="style.css?v=20260517-weather2">
+  <link rel="stylesheet" href="style.css?v=20260517-weather3">
 </head>
 
 <body>
@@ -14,11 +14,16 @@
   <header id="app-header">
     <h1><span class="brand-name">차도리</span> <span class="header-sub"><span class="name-mark">차</span>량 운행 <span class="name-mark">도</span>우미 <span class="name-mark">리</span>포트</span></h1>
     <div id="header-weather" class="header-weather" hidden aria-live="polite">
-      <div class="weather-today">
-        <span class="weather-label">오늘</span>
-        <span id="weather-hourly" class="weather-hourly"></span>
+      <div id="weather-location" class="weather-location"></div>
+      <div class="weather-lines">
+        <div class="weather-row weather-today">
+          <span class="weather-label">오늘</span>
+          <span id="weather-hourly" class="weather-hourly"></span>
+        </div>
+        <div class="weather-row">
+          <span id="weather-tomorrow" class="weather-tomorrow"></span>
+        </div>
       </div>
-      <div id="weather-tomorrow" class="weather-tomorrow"></div>
     </div>
     <div class="header-btns">
       <button id="btn-help" class="btn-header-ghost"><span class="ui-icon icon-help" aria-hidden="true"></span> 도움말</button>
@@ -323,7 +328,7 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260517-weather2"></script>
+  <script src="app.js?v=20260517-weather3"></script>
 </body>
 
 </html>
