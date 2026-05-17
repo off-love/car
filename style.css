@@ -121,14 +121,15 @@ textarea {
 }
 
 .header-sub {
-  font-size: 12px;
-  font-weight: 700;
-  opacity: .78;
+  font-size: 13px;
+  font-weight: 650;
+  opacity: .92;
   letter-spacing: 0;
+  word-break: keep-all;
 }
 
 .brand-name {
-  min-width: 110px;
+  min-width: 74px;
   height: 30px;
   border-radius: 8px;
   background: rgba(255, 255, 255, .12);
@@ -137,30 +138,31 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  font-size: 19px;
+  font-size: 16px;
   font-weight: 900;
   letter-spacing: 0;
-  padding: 0 13px;
+  padding: 0 12px;
   text-shadow: 0 1px 8px rgba(0, 0, 0, .22);
   box-shadow: inset 0 -2px 0 rgba(3, 199, 90, .65);
 }
 
-.brand-name span {
-  display: inline-block;
-  line-height: 1;
-}
-
-.brand-name span:first-child {
+.name-mark {
   color: #58F39A;
+  font-size: 15px;
+  font-weight: 950;
+  padding: 0 1px 2px;
+  border-bottom: 2px solid currentColor;
+  text-shadow: 0 0 10px rgba(88, 243, 154, .42);
 }
 
-.brand-name span:nth-child(2) {
-  color: #fff;
+.name-mark:nth-of-type(2) {
+  color: #9BC7FF;
+  text-shadow: 0 0 10px rgba(155, 199, 255, .36);
 }
 
-.brand-name span:last-child {
+.name-mark:nth-of-type(3) {
   color: #FFE36E;
+  text-shadow: 0 0 10px rgba(255, 227, 110, .38);
 }
 
 .header-btns {
@@ -293,8 +295,8 @@ table .col-action {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 76px;
-  padding: 9px 12px;
+  min-height: 68px;
+  padding: 8px 12px;
   border-radius: 8px;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -330,8 +332,8 @@ table .col-action {
 }
 
 .stop-icon {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
   flex-shrink: 0;
   filter: drop-shadow(0 4px 8px rgba(23, 35, 60, .14));
@@ -1736,10 +1738,9 @@ table td {
   }
 
   .brand-name {
-    min-width: 98px;
+    min-width: 68px;
     height: 28px;
-    gap: 10px;
-    font-size: 17px;
+    font-size: 15px;
   }
 
   .header-sub {
