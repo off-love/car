@@ -1922,10 +1922,6 @@ table td {
     max-width: 48vw;
   }
 
-  .weather-hour-column.hide-compact {
-    display: none;
-  }
-
   #main-grid {
     grid-template-columns: 300px 1fr 300px;
   }

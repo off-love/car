@@ -40,7 +40,7 @@ const REGIONS = [
   ['경북', '경상북도'], ['경남', '경상남도'], ['제주', '제주']
 ];
 
-const WEATHER_HOURLY_LIMIT = 6;
+const WEATHER_LAST_HOUR = 22;
 const WEATHER_ICON_KINDS = new Set(['clear', 'cloud', 'overcast']);
 const WEATHER_FORECAST_TIMEOUT_MS = 7000;
 const WEATHER_LOCATION_TIMEOUT_MS = 3500;
@@ -90,6 +90,25 @@ function getSeoulDateKey(date = new Date()) {
 
 function parseSeoulTime(value) {
   return new Date(`${value}+09:00`);
+}
+
+function getWeatherHourStart(date = new Date()) {
+  const zoned = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  const hour = zoned.getMinutes() || zoned.getSeconds() || zoned.getMilliseconds()
+    ? zoned.getHours() + 1
+    : zoned.getHours();
+  return Math.min(hour, 24);
+}
+
+function getVisibleWeatherHours(date = new Date()) {
+  const startHour = getWeatherHourStart(date);
+  if (startHour > WEATHER_LAST_HOUR) return [];
+  const hours = [];
+  for (let hour = startHour; hour <= WEATHER_LAST_HOUR; hour += 2) {
+    hours.push(hour);
+  }
+  if (hours[hours.length - 1] !== WEATHER_LAST_HOUR) hours.push(WEATHER_LAST_HOUR);
+  return hours;
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 7000) {
@@ -271,19 +290,19 @@ function renderHeaderWeather(data, locationLabel) {
   const temps = data.hourly?.temperature_2m || [];
   const codes = data.hourly?.weather_code || [];
   const probabilities = data.hourly?.precipitation_probability || [];
-  const remainingToday = times
+  const visibleHours = new Set(getVisibleWeatherHours(now));
+  const todayForecast = times
     .map((time, i) => ({
       date: parseSeoulTime(time),
       temp: temps[i],
       code: codes[i],
       probability: probabilities[i]
     }))
-    .filter(item => getSeoulDateKey(item.date) === todayKey && item.date >= now)
-    .slice(0, WEATHER_HOURLY_LIMIT);
+    .filter(item => getSeoulDateKey(item.date) === todayKey && visibleHours.has(item.date.getHours()));
 
   hourlyEl.replaceChildren();
   locationEl.textContent = locationLabel || getWeatherLocationFromAddress(S.settings.officeAddr) || '날씨';
-  if (!remainingToday.length) {
+  if (!todayForecast.length) {
     const empty = document.createElement('span');
     empty.className = 'weather-status';
     empty.textContent = '남은 예보 없음';
@@ -298,12 +317,11 @@ function renderHeaderWeather(data, locationLabel) {
     });
     hourlyEl.append(axis);
 
-    remainingToday.forEach(item => {
+    todayForecast.forEach(item => {
       const hour = item.date.getHours();
       const probability = Number(item.probability) || 0;
       const col = document.createElement('div');
       col.className = 'weather-hour-column';
-      if (hourlyEl.children.length > 4) col.classList.add('hide-compact');
 
       const timeEl = document.createElement('span');
       timeEl.className = 'weather-time';
