@@ -44,6 +44,9 @@ const WEATHER_LAST_HOUR = 22;
 const WEATHER_ICON_KINDS = new Set(['clear', 'cloud', 'overcast']);
 const WEATHER_FORECAST_TIMEOUT_MS = 7000;
 const WEATHER_LOCATION_TIMEOUT_MS = 3500;
+const OCR_MAX_ADDRESSES = 10;
+const OCR_PREPROCESS_MAX_SIDE = 3200;
+const OCR_PREPROCESS_MIN_LONG_SIDE = 1600;
 
 // ============================================================
 // STORAGE
@@ -941,41 +944,350 @@ async function imageFileToCanvas(file) {
   return canvas;
 }
 
-function cleanOcrAddressLine(line) {
-  return line
+function createScaledOcrCanvas(sourceCanvas) {
+  const longSide = Math.max(sourceCanvas.width, sourceCanvas.height);
+  let scale = longSide < OCR_PREPROCESS_MIN_LONG_SIDE
+    ? OCR_PREPROCESS_MIN_LONG_SIDE / longSide
+    : 1;
+
+  scale = Math.min(2.5, Math.max(1, scale));
+  if (longSide * scale > OCR_PREPROCESS_MAX_SIDE) {
+    scale = OCR_PREPROCESS_MAX_SIDE / longSide;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(sourceCanvas.width * scale));
+  canvas.height = Math.max(1, Math.round(sourceCanvas.height * scale));
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function getAutoLevelBounds(histogram, total) {
+  const lowTarget = Math.max(1, Math.round(total * .01));
+  const highTarget = Math.max(1, Math.round(total * .99));
+  let sum = 0;
+  let low = 0;
+  let high = 255;
+
+  for (let i = 0; i < histogram.length; i++) {
+    sum += histogram[i];
+    if (sum >= lowTarget) {
+      low = i;
+      break;
+    }
+  }
+
+  sum = 0;
+  for (let i = 0; i < histogram.length; i++) {
+    sum += histogram[i];
+    if (sum >= highTarget) {
+      high = i;
+      break;
+    }
+  }
+
+  if (high <= low) high = Math.min(255, low + 1);
+  return { low, high };
+}
+
+function createContrastOcrCanvas(sourceCanvas) {
+  const canvas = createScaledOcrCanvas(sourceCanvas);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = image.data;
+  const histogram = new Uint32Array(256);
+
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = Math.round(data[i] * .299 + data[i + 1] * .587 + data[i + 2] * .114);
+    histogram[lum]++;
+  }
+
+  const { low, high } = getAutoLevelBounds(histogram, data.length / 4);
+  const range = high - low || 1;
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = Math.round(data[i] * .299 + data[i + 1] * .587 + data[i + 2] * .114);
+    const leveled = Math.max(0, Math.min(255, Math.round((lum - low) * 255 / range)));
+    data[i] = data[i + 1] = data[i + 2] = leveled;
+    data[i + 3] = 255;
+  }
+
+  ctx.putImageData(image, 0, 0);
+  return canvas;
+}
+
+function createInvertedContrastOcrCanvas(sourceCanvas) {
+  const canvas = createScaledOcrCanvas(sourceCanvas);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = image.data;
+  const histogram = new Uint32Array(256);
+
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = Math.round(data[i] * .299 + data[i + 1] * .587 + data[i + 2] * .114);
+    histogram[lum]++;
+  }
+
+  const { low, high } = getAutoLevelBounds(histogram, data.length / 4);
+  const range = high - low || 1;
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = Math.round(data[i] * .299 + data[i + 1] * .587 + data[i + 2] * .114);
+    const leveled = Math.max(0, Math.min(255, Math.round((lum - low) * 255 / range)));
+    const inverted = 255 - leveled;
+    data[i] = data[i + 1] = data[i + 2] = inverted;
+    data[i + 3] = 255;
+  }
+
+  ctx.putImageData(image, 0, 0);
+  return canvas;
+}
+
+function createAdaptiveOcrCanvas(sourceCanvas, mode = 'dark') {
+  const brightText = mode === true || mode === 'bright';
+  const mixedText = mode === 'mixed';
+  const canvas = createScaledOcrCanvas(sourceCanvas);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { data, width, height } = image;
+  const stride = width + 1;
+  const integral = new Uint32Array((width + 1) * (height + 1));
+  const luma = new Uint8Array(width * height);
+
+  for (let y = 0; y < height; y++) {
+    let rowSum = 0;
+    for (let x = 0; x < width; x++) {
+      const dataIndex = (y * width + x) * 4;
+      const lum = Math.round(data[dataIndex] * .299 + data[dataIndex + 1] * .587 + data[dataIndex + 2] * .114);
+      const lumaIndex = y * width + x;
+      luma[lumaIndex] = lum;
+      rowSum += lum;
+      integral[(y + 1) * stride + x + 1] = integral[y * stride + x + 1] + rowSum;
+    }
+  }
+
+  const radius = Math.max(10, Math.round(Math.min(width, height) / 70));
+  const thresholdOffset = brightText ? 12 : -9;
+  const mixedOffset = 18;
+
+  for (let y = 0; y < height; y++) {
+    const y1 = Math.max(0, y - radius);
+    const y2 = Math.min(height - 1, y + radius);
+    for (let x = 0; x < width; x++) {
+      const x1 = Math.max(0, x - radius);
+      const x2 = Math.min(width - 1, x + radius);
+      const count = (x2 - x1 + 1) * (y2 - y1 + 1);
+      const sum = integral[(y2 + 1) * stride + x2 + 1]
+        - integral[y1 * stride + x2 + 1]
+        - integral[(y2 + 1) * stride + x1]
+        + integral[y1 * stride + x1];
+      const mean = sum / count;
+      const lum = luma[y * width + x];
+      const isText = mixedText
+        ? Math.abs(lum - mean) > mixedOffset
+        : brightText
+          ? lum > mean + thresholdOffset
+          : lum < mean + thresholdOffset;
+      const value = isText ? 0 : 255;
+      const dataIndex = (y * width + x) * 4;
+      data[dataIndex] = data[dataIndex + 1] = data[dataIndex + 2] = value;
+      data[dataIndex + 3] = 255;
+    }
+  }
+
+  removeBinaryGuideLines(data, width, height);
+  ctx.putImageData(image, 0, 0);
+  return canvas;
+}
+
+function removeBinaryGuideLines(data, width, height) {
+  const rowLimit = Math.round(width * .48);
+  const colLimit = Math.round(height * .2);
+  const rowsToClear = [];
+  const colsToClear = [];
+
+  for (let y = 0; y < height; y++) {
+    let black = 0;
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4] < 128) black++;
+    }
+    if (black >= rowLimit) rowsToClear.push(y);
+  }
+
+  for (let x = 0; x < width; x++) {
+    let black = 0;
+    for (let y = 0; y < height; y++) {
+      if (data[(y * width + x) * 4] < 128) black++;
+    }
+    if (black >= colLimit) colsToClear.push(x);
+  }
+
+  rowsToClear.forEach(y => {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      data[index] = data[index + 1] = data[index + 2] = 255;
+    }
+  });
+
+  colsToClear.forEach(x => {
+    for (let y = 0; y < height; y++) {
+      const index = (y * width + x) * 4;
+      data[index] = data[index + 1] = data[index + 2] = 255;
+    }
+  });
+}
+
+function createOcrPreprocessVariants(sourceCanvas) {
+  return [
+    { label: '명암 보정', canvas: createContrastOcrCanvas(sourceCanvas), psm: '6' },
+    { label: '반전 명암 보정', canvas: createInvertedContrastOcrCanvas(sourceCanvas), psm: '6' },
+    { label: '일반 글자 보정', canvas: createAdaptiveOcrCanvas(sourceCanvas, 'dark'), psm: '6' },
+    { label: '혼합 배경 보정', canvas: createAdaptiveOcrCanvas(sourceCanvas, 'mixed'), psm: '6' },
+    { label: '밝은 글자 보정', canvas: createAdaptiveOcrCanvas(sourceCanvas, 'bright'), psm: '6' }
+  ];
+}
+
+function detectOcrTextBands(sourceCanvas) {
+  const { width, height } = sourceCanvas;
+  if (height < 120) return [];
+
+  const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+  const data = ctx.getImageData(0, 0, width, height).data;
+  const stepX = Math.max(2, Math.round(width / 420));
+  const threshold = Math.max(7, Math.round((width / stepX) * .025));
+  const activeRows = [];
+
+  for (let y = 0; y < height; y += 2) {
+    let activity = 0;
+    for (let x = 0; x < width; x += stepX) {
+      const index = (y * width + x) * 4;
+      const r = data[index];
+      const g = data[index + 1];
+      const b = data[index + 2];
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const lum = r * .299 + g * .587 + b * .114;
+      if ((max - min) > 28 || lum < 215) activity++;
+    }
+    if (activity >= threshold) activeRows.push(y);
+  }
+
+  const bands = [];
+  let start = null;
+  let prev = null;
+  activeRows.forEach(y => {
+    if (start == null) {
+      start = y;
+      prev = y;
+      return;
+    }
+    if (y - prev <= 14) {
+      prev = y;
+      return;
+    }
+    bands.push({ y1: start, y2: prev });
+    start = y;
+    prev = y;
+  });
+  if (start != null) bands.push({ y1: start, y2: prev });
+
+  return bands
+    .map(band => ({
+      y1: Math.max(0, band.y1 - 16),
+      y2: Math.min(height, band.y2 + 18)
+    }))
+    .filter(band => band.y2 - band.y1 >= 22)
+    .slice(0, OCR_MAX_ADDRESSES + 4);
+}
+
+function cropOcrBand(sourceCanvas, band) {
+  const canvas = document.createElement('canvas');
+  canvas.width = sourceCanvas.width;
+  canvas.height = Math.max(1, band.y2 - band.y1);
+  canvas.getContext('2d').drawImage(
+    sourceCanvas,
+    0, band.y1, sourceCanvas.width, canvas.height,
+    0, 0, sourceCanvas.width, canvas.height
+  );
+  return canvas;
+}
+
+function createOcrRecognitionJobs(sourceCanvas) {
+  const jobs = createOcrPreprocessVariants(sourceCanvas);
+  const bands = detectOcrTextBands(sourceCanvas);
+
+  if (bands.length >= 2) {
+    bands.forEach((band, i) => {
+      const crop = cropOcrBand(sourceCanvas, band);
+      jobs.push({ label: `행 ${i + 1} 명암 보정`, canvas: createContrastOcrCanvas(crop), psm: '7' });
+      jobs.push({ label: `행 ${i + 1} 반전 보정`, canvas: createInvertedContrastOcrCanvas(crop), psm: '7' });
+    });
+  }
+
+  return jobs;
+}
+
+const OCR_SIDO_SOURCE = '(?:서울(?:특별시|시)?|부산(?:광역시|시)?|대구(?:광역시|시)?|인천(?:광역시|시)?|광주(?:광역시|시)?|대전(?:광역시|시)?|울산(?:광역시|시)?|세종(?:특별자치시|시)?|경기(?:도)?|강원(?:특별자치도|도)?|충북|충청북도|충남|충청남도|전북|전라북도|전남|전라남도|경북|경상북도|경남|경상남도|제주(?:특별자치도|도)?)';
+const OCR_SIGUNGU_SOURCE = '(?:[가-힣]{1,10}(?:시|군|구)(?:\\s+[가-힣]{1,10}구)?)';
+const OCR_LEGAL_AREA_SOURCE = '(?:[가-힣][가-힣0-9]{0,12}(?:읍|면|동|리|가))';
+const OCR_ROAD_NAME_SOURCE = '(?:[가-힣A-Za-z0-9.·ㆍ-]{1,30}(?:대로|번길|로|길|고속도로))';
+const OCR_JIBUN_NUMBER_SOURCE = '(?:(?:산\\s*)?\\d{1,5}(?:\\s*-\\s*\\d{1,5})?)';
+const OCR_ROAD_NUMBER_SOURCE = '(?:(?:지하\\s*)?\\d{1,5}(?:\\s*-\\s*\\d{1,5})?)';
+const OCR_ADMIN_PREFIX_SOURCE = `(?:(?:${OCR_SIDO_SOURCE})\\s+)?(?:(?:${OCR_SIGUNGU_SOURCE})\\s+)?`;
+
+function normalizeOcrText(text = '') {
+  return String(text)
+    .normalize('NFKC')
     .replace(/\u00a0/g, ' ')
     .replace(/[|＿_]/g, ' ')
     .replace(/[［\[{]/g, '(')
     .replace(/[］\]}]/g, ')')
+    .replace(/[－–—―~〜∼]/g, '-')
+    .replace(/(\d)\s*[一ー]\s*(\d)/g, '$1-$2')
+    .replace(/민천(?=\s*(?:광역시|시|서구|남동구|미추홀구|부평구|계양구|연수구|중구|동구))/g, '인천')
+    .replace(/가[자최]동(?=\s*(?:산\s*)?\d)/g, '가좌동')
+    .replace(/출라동(?=\s*\d)/g, '청라동')
     .replace(/[“”‘’"'`]/g, '')
+    .replace(/\s*-\s*/g, '-')
+    .replace(/([가-힣][가-힣0-9]*(?:읍|면|동|리|가))(?=(?:산\s*)?\d)/g, '$1 ')
+    .replace(/([가-힣A-Za-z0-9.·ㆍ-]+(?:대로|번길|로|길|고속도로))(?=(?:지하\s*)?\d)/g, '$1 ')
+    .replace(/산\s*(?=\d)/g, '산 ')
+    .replace(/산\s+(\d)\1(\d)\b/g, '산 $1-$2')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanOcrAddressLine(line) {
+  return normalizeOcrText(line)
     .replace(/\b(?:T\.?|TEL|전화|연락처)\s*[:：]?\s*\d{2,4}[-.\s]\d{3,4}[-.\s]\d{4}.*$/i, '')
     .replace(/^\s*\(?우(?:편번호)?\)?\s*\d{3,5}(?:[-\s]\d{2,3})?\s*/i, '')
     .replace(/^\s*\(?\d{5}\)?\s+(?=[가-힣])/, '')
-    .replace(/\s+/g, ' ')
-    .replace(/^\s*(?:[①-⑳]|[가-하]|\d{1,2})[\).:：-]\s+/, '')
+    .replace(/^\s*(?:[①-⑳]|[가-하]|\d{1,2})[\).:：-]\s*/, '')
     .replace(/^(출발지|도착지|출발|도착|경유지|목적지|방문지|주소지|주소|소재지|위치|도로명주소|지번주소|도로명|지번|장소|상호|업체명)\s*[:：-]?\s*/i, '')
     .replace(/\s*(전화|TEL|연락처|팩스|사업자|대표자).*$/i, '')
     .replace(/^[\s,.;:：/~-]+|[\s,.;:：/~-]+$/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
 function getAddressSignal(line) {
-  const sido = /(서울(?:특별시|시)?|부산(?:광역시|시)?|대구(?:광역시|시)?|인천(?:광역시|시)?|광주(?:광역시|시)?|대전(?:광역시|시)?|울산(?:광역시|시)?|세종(?:특별자치시|시)?|경기(?:도)?|강원(?:특별자치도|도)?|충북|충청북도|충남|충청남도|전북|전라북도|전남|전라남도|경북|경상북도|경남|경상남도|제주(?:특별자치도|도)?)/;
-  const sigungu = /[가-힣]{1,10}(?:시|군|구)(?:\s+[가-힣]{1,10}구)?/;
-  const legalArea = /[가-힣][가-힣0-9]*(?:읍|면|동|리|가)/;
-  const roadName = /[가-힣A-Za-z0-9.·ㆍ-]+(?:대로|번길|로|길|고속도로)/;
-  const roadWithNumber = /[가-힣A-Za-z0-9.·ㆍ-]+(?:대로|번길|로|길|고속도로)\s*(?:지하\s*)?\d{1,5}(?:-\d{1,5})?/;
-  const jibunWithNumber = /[가-힣][가-힣0-9]*(?:읍|면|동|리|가)\s*(?:산\s*)?\d{1,5}(?:-\d{1,5})?/;
-  const mountainJibun = /[가-힣][가-힣0-9]*(?:읍|면|동|리)\s+산\s*\d{1,5}(?:-\d{1,5})?/;
+  const normalized = normalizeOcrText(line);
+  const sido = new RegExp(OCR_SIDO_SOURCE);
+  const sigungu = new RegExp(OCR_SIGUNGU_SOURCE);
+  const legalArea = new RegExp(OCR_LEGAL_AREA_SOURCE);
+  const roadName = new RegExp(OCR_ROAD_NAME_SOURCE);
+  const roadWithNumber = new RegExp(`${OCR_ROAD_NAME_SOURCE}\\s*${OCR_ROAD_NUMBER_SOURCE}`);
+  const jibunWithNumber = new RegExp(`${OCR_LEGAL_AREA_SOURCE}\\s*${OCR_JIBUN_NUMBER_SOURCE}`);
   const detail = /(아파트|빌딩|타워|센터|상가|오피스텔|회관|본관|별관|사옥|타운|프라자|몰|관|층|호|지하\s*\d?층?)/i;
 
-  const hasSido = sido.test(line);
-  const hasSigungu = sigungu.test(line);
-  const hasLegalArea = legalArea.test(line);
-  const hasRoadName = roadName.test(line);
-  const hasRoadNumber = roadWithNumber.test(line);
-  const hasJibun = jibunWithNumber.test(line) || mountainJibun.test(line);
-  const hasDetail = detail.test(line);
+  const hasSido = sido.test(normalized);
+  const hasSigungu = sigungu.test(normalized);
+  const hasLegalArea = legalArea.test(normalized);
+  const hasRoadName = roadName.test(normalized);
+  const hasRoadNumber = roadWithNumber.test(normalized);
+  const hasJibun = jibunWithNumber.test(normalized);
+  const hasDetail = detail.test(normalized);
   const hasAdministrative = hasSido || hasSigungu;
   const hasSpecific = hasRoadNumber || hasJibun;
 
@@ -988,7 +1300,7 @@ function getAddressSignal(line) {
   if (hasJibun) score += 5;
   if (hasDetail) score += 1;
 
-  return { score, hasAdministrative, hasLegalArea, hasRoadName, hasSpecific };
+  return { score, hasAdministrative, hasLegalArea, hasRoadName, hasSpecific, hasSido, hasSigungu };
 }
 
 function isAdministrativeOnly(line) {
@@ -1004,45 +1316,175 @@ function isAddressFragment(line) {
   return signal.hasAdministrative
     || signal.hasLegalArea
     || signal.hasRoadName
-    || /^(?:(?:산|지하)\s*)?\d{1,5}(?:-\d{1,5})?(?:\s|$)/.test(line);
+    || /^(?:(?:산|지하)\s*)?\d{1,5}(?:-\d{1,5})?(?:\s|$)/.test(normalizeOcrText(line));
 }
 
 function isLikelyAddress(line) {
-  if (line.length < 2 || line.length > 90) return false;
-  if (!/[가-힣]/.test(line)) return false;
-  if (/(합계|소요|거리|검색|저장|초기화|도움말|설정|이미지|캡처|선택|확인|취소|추가|입력|전화|TEL|사업자|경로 계산|차도리|차량 운행|리포트|주소 입력|경유지 입력|사무실 주소|네이버지도|카카오맵|지도|공유|닫기|복사|거리뷰|위성|교통정보)/i.test(line)) return false;
+  const normalized = cleanOcrAddressLine(line);
+  if (normalized.length < 2 || normalized.length > 90) return false;
+  if (!/[가-힣]/.test(normalized)) return false;
+  if (/(합계|소요|거리|검색|저장|초기화|도움말|설정|이미지|캡처|선택|확인|취소|추가|입력|전화|TEL|사업자|경로 계산|차도리|차량 운행|리포트|주소 입력|경유지 입력|사무실 주소|네이버지도|카카오맵|지도|공유|닫기|복사|거리뷰|위성|교통정보)/i.test(normalized)) return false;
 
-  const signal = getAddressSignal(line);
+  const signal = getAddressSignal(normalized);
   if (signal.hasSpecific && (signal.hasAdministrative || signal.score >= 5)) return true;
-  if (signal.hasRoadName && !/\d/.test(line)) return false;
-  if (isAdministrativeOnly(line)) return false;
-  if (/\d/.test(line)) return signal.score >= 5;
+  if (signal.hasRoadName && !/\d/.test(normalized)) return false;
+  if (isAdministrativeOnly(normalized)) return false;
+  if (/\d/.test(normalized)) return signal.score >= 5;
 
-  const hangulCount = (line.match(/[가-힣]/g) || []).length;
+  const hangulCount = (normalized.match(/[가-힣]/g) || []).length;
   const looksLikePlaceName = hangulCount >= 3
-    && line.length <= 35
-    && /^[가-힣A-Za-z0-9\s().&-]+$/.test(line)
-    && !/(출발지|도착지|출발|도착|경유지|목적지|방문지|주소|위치)$/.test(line);
+    && normalized.length <= 35
+    && /^[가-힣A-Za-z0-9\s().&-]+$/.test(normalized)
+    && !/(출발지|도착지|출발|도착|경유지|목적지|방문지|주소|위치)$/.test(normalized);
 
   return looksLikePlaceName;
 }
 
-function extractAddressCandidates(text) {
-  const pieces = text
+function extractInlineAddressCandidates(line) {
+  const normalized = cleanOcrAddressLine(line);
+  if (!normalized) return [];
+
+  const patterns = [
+    new RegExp(`${OCR_ADMIN_PREFIX_SOURCE}${OCR_LEGAL_AREA_SOURCE}\\s*${OCR_JIBUN_NUMBER_SOURCE}`, 'g'),
+    new RegExp(`${OCR_ADMIN_PREFIX_SOURCE}${OCR_ROAD_NAME_SOURCE}\\s*${OCR_ROAD_NUMBER_SOURCE}`, 'g')
+  ];
+  const matches = [];
+
+  patterns.forEach(pattern => {
+    for (const match of normalized.matchAll(pattern)) {
+      const candidate = cleanOcrAddressLine(match[0]);
+      if (!isLikelyAddress(candidate)) continue;
+      matches.push({ index: match.index ?? 0, address: candidate });
+    }
+  });
+
+  return matches
+    .sort((a, b) => a.index - b.index || b.address.length - a.address.length)
+    .map(match => match.address);
+}
+
+function splitOcrAddressPieces(text) {
+  return normalizeOcrText(text)
     .replace(/\r/g, '\n')
-    .replace(/[•●○◯◎■▶→▲△▼▽]/g, '\n')
+    .replace(/[•●○◯◎■□▶→▲△▼▽]/g, '\n')
     .replace(/(?:경유지|주소)\s*입력/gi, '\n')
     .replace(/(?:출발지|도착지|출발|도착|경유지|목적지|방문지|주소지|주소|소재지|위치|도로명주소|지번주소|도로명|지번)\s*[:：-]\s*/gi, '\n')
     .replace(/[;；]/g, '\n')
+    .replace(/\s+[|｜]\s+/g, '\n')
     .split('\n')
     .map(cleanOcrAddressLine)
     .filter(Boolean);
+}
 
-  const candidates = [];
-  for (let i = 0; i < pieces.length; i++) {
+function getAddressCoreKey(line) {
+  const normalized = normalizeOcrText(line);
+  const jibun = normalized.match(new RegExp(`(${OCR_LEGAL_AREA_SOURCE})\\s*((?:산\\s*)?\\d{1,5}(?:-\\d{1,5})?)`));
+  if (jibun) return `jibun:${jibun[1]}:${jibun[2].replace(/\s+/g, '')}`;
+
+  const road = normalized.match(new RegExp(`(${OCR_ROAD_NAME_SOURCE})\\s*((?:지하\\s*)?\\d{1,5}(?:-\\d{1,5})?)`));
+  if (road) return `road:${road[1]}:${road[2].replace(/\s+/g, '')}`;
+
+  return '';
+}
+
+function getAddressLotSignature(line) {
+  const normalized = normalizeOcrText(line);
+  const match = normalized.match(new RegExp(`(${OCR_LEGAL_AREA_SOURCE})\\s*(산\\s*)?(\\d{1,5})(?:-(\\d{1,5}))?`));
+  if (!match) return null;
+  return {
+    area: match[1],
+    isMountain: !!match[2],
+    main: match[3],
+    sub: match[4] || '',
+    compact: `${match[3]}${match[4] || ''}`,
+    hasHyphen: !!match[4]
+  };
+}
+
+function isLooseLotDuplicate(a, b) {
+  if (!a || !b) return false;
+  if (a.area !== b.area || a.isMountain !== b.isMountain) return false;
+  if (a.hasHyphen && b.hasHyphen) return a.compact === b.compact;
+  if (a.hasHyphen && !b.hasHyphen) return b.compact.startsWith(a.main);
+  if (!a.hasHyphen && b.hasHyphen) return a.compact.startsWith(b.main);
+  return a.compact === b.compact;
+}
+
+function getAddressExactKey(line) {
+  return normalizeOcrText(line).replace(/[^0-9가-힣]/g, '');
+}
+
+function isBetterAddressCandidate(next, current) {
+  const nextLot = getAddressLotSignature(next);
+  const currentLot = getAddressLotSignature(current);
+  if (nextLot?.hasHyphen !== currentLot?.hasHyphen) return !!nextLot?.hasHyphen;
+
+  const nextSignal = getAddressSignal(next);
+  const currentSignal = getAddressSignal(current);
+  if (nextSignal.score !== currentSignal.score) return nextSignal.score > currentSignal.score;
+  if (nextSignal.hasAdministrative !== currentSignal.hasAdministrative) return nextSignal.hasAdministrative;
+  return next.length > current.length;
+}
+
+function dedupeAddressCandidates(candidates, limit = OCR_MAX_ADDRESSES) {
+  const selected = [];
+  const exactToIndex = new Map();
+  const coreToIndex = new Map();
+  const lotSignatures = [];
+
+  candidates
+    .map(cleanOcrAddressLine)
+    .filter(isLikelyAddress)
+    .forEach(candidate => {
+      const exactKey = getAddressExactKey(candidate);
+      const coreKey = getAddressCoreKey(candidate);
+      const lotSignature = getAddressLotSignature(candidate);
+      const duplicateIndex = exactToIndex.has(exactKey)
+        ? exactToIndex.get(exactKey)
+        : coreKey && coreToIndex.has(coreKey)
+          ? coreToIndex.get(coreKey)
+          : lotSignatures.findIndex(signature => isLooseLotDuplicate(lotSignature, signature));
+
+      if (duplicateIndex >= 0) {
+        if (isBetterAddressCandidate(candidate, selected[duplicateIndex])) {
+          selected[duplicateIndex] = candidate;
+          exactToIndex.set(exactKey, duplicateIndex);
+          if (coreKey) coreToIndex.set(coreKey, duplicateIndex);
+          lotSignatures[duplicateIndex] = lotSignature;
+        }
+        return;
+      }
+
+      if (selected.length >= limit) return;
+      exactToIndex.set(exactKey, selected.length);
+      if (coreKey) coreToIndex.set(coreKey, selected.length);
+      lotSignatures.push(lotSignature);
+      selected.push(candidate);
+    });
+
+  return selected;
+}
+
+function extractAddressCandidates(text) {
+  const normalizedText = normalizeOcrText(text);
+  const pieces = splitOcrAddressPieces(normalizedText);
+  const candidates = extractInlineAddressCandidates(normalizedText);
+  const mergePieces = [];
+
+  pieces.forEach(piece => {
+    const inlineCandidates = extractInlineAddressCandidates(piece);
+    if (inlineCandidates.length > 1) {
+      candidates.push(...inlineCandidates);
+    } else {
+      mergePieces.push(piece);
+      candidates.push(inlineCandidates[0] || piece);
+    }
+  });
+
+  for (let i = 0; i < mergePieces.length; i++) {
     let merged = null;
-    for (let span = Math.min(3, pieces.length - i); span >= 2; span--) {
-      const parts = pieces.slice(i, i + span);
+    for (let span = Math.min(3, mergePieces.length - i); span >= 2; span--) {
+      const parts = mergePieces.slice(i, i + span);
       const combined = cleanOcrAddressLine(parts.join(' '));
       if (
         isLikelyAddress(combined)
@@ -1058,21 +1500,10 @@ function extractAddressCandidates(text) {
     if (merged) {
       candidates.push(merged.line);
       i += merged.span - 1;
-    } else {
-      candidates.push(pieces[i]);
     }
   }
 
-  const seen = new Set();
-  return candidates
-    .filter(isLikelyAddress)
-    .filter(line => {
-      const key = line.replace(/[^0-9가-힣]/g, '');
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 10);
+  return dedupeAddressCandidates(candidates);
 }
 
 function renderOcrCandidates(candidates) {
@@ -1126,6 +1557,31 @@ function getImageFromPaste(e) {
   return imageItem?.getAsFile() || null;
 }
 
+async function recognizeOcrText(Tesseract, canvas) {
+  const variants = createOcrRecognitionJobs(canvas);
+  const texts = [];
+
+  for (let i = 0; i < variants.length; i++) {
+    const variant = variants[i];
+    setOcrStatus(`${variant.label} 인식 중... (${i + 1}/${variants.length})`);
+
+    const result = await Tesseract.recognize(variant.canvas, 'kor+eng', {
+      preserve_interword_spaces: '1',
+      tessedit_pageseg_mode: variant.psm,
+      user_defined_dpi: '300',
+      logger: msg => {
+        if (typeof msg.progress === 'number') {
+          setOcrProgress(.06 + ((i + msg.progress) / variants.length) * .9);
+        }
+      }
+    });
+
+    texts.push(result.data?.text || '');
+  }
+
+  return texts.join('\n');
+}
+
 async function processOcrImage(file) {
   if (!file) return;
   if (file.type && !file.type.startsWith('image/')) {
@@ -1146,16 +1602,10 @@ async function processOcrImage(file) {
     setOcrStatus('OCR 준비 중...');
     const Tesseract = await loadTesseract();
 
-    setOcrStatus('텍스트 인식 중...');
+    setOcrStatus('이미지 전처리 중...');
     setOcrProgress(.05);
-    const result = await Tesseract.recognize(canvas, 'kor+eng', {
-      logger: msg => {
-        if (typeof msg.progress === 'number') setOcrProgress(msg.progress);
-        if (msg.status === 'recognizing text') setOcrStatus('텍스트 인식 중...');
-      }
-    });
-
-    const candidates = extractAddressCandidates(result.data?.text || '');
+    const recognizedText = await recognizeOcrText(Tesseract, canvas);
+    const candidates = extractAddressCandidates(recognizedText);
     S.ocrCandidates = candidates;
     setOcrProgress(null);
     setOcrStatus(candidates.length ? `${candidates.length}개 주소 후보를 찾았습니다` : '주소 후보를 찾지 못했습니다');
@@ -1206,10 +1656,9 @@ async function geocodeWaypointByIndex(i) {
 }
 
 async function applyOcrAddresses() {
-  const addresses = Array.from(document.querySelectorAll('.ocr-address-input'))
+  const addresses = dedupeAddressCandidates(Array.from(document.querySelectorAll('.ocr-address-input'))
     .map(input => input.value.trim())
-    .filter(Boolean)
-    .slice(0, 10);
+    .filter(Boolean));
 
   if (!addresses.length) {
     toast('적용할 주소가 없습니다');
