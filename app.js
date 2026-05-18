@@ -1235,6 +1235,7 @@ const OCR_ROAD_NAME_SOURCE = '(?:[가-힣A-Za-z0-9.·ㆍ-]{1,30}(?:대로|번길
 const OCR_JIBUN_NUMBER_SOURCE = '(?:(?:산\\s*)?\\d{1,5}(?:\\s*-\\s*\\d{1,5})?)';
 const OCR_ROAD_NUMBER_SOURCE = '(?:(?:지하\\s*)?\\d{1,5}(?:\\s*-\\s*\\d{1,5})?)';
 const OCR_ADMIN_PREFIX_SOURCE = `(?:(?:${OCR_SIDO_SOURCE})\\s+)?(?:(?:${OCR_SIGUNGU_SOURCE})\\s+)?`;
+const OCR_ADMIN_TOKEN_SOURCE = `${OCR_SIDO_SOURCE}|${OCR_SIGUNGU_SOURCE}`;
 
 function normalizeOcrText(text = '') {
   return String(text)
@@ -1247,11 +1248,15 @@ function normalizeOcrText(text = '') {
     .replace(/(\d)\s*[一ー]\s*(\d)/g, '$1-$2')
     .replace(/민천(?=\s*(?:광역시|시|서구|남동구|미추홀구|부평구|계양구|연수구|중구|동구))/g, '인천')
     .replace(/가[자최]동(?=\s*(?:산\s*)?\d)/g, '가좌동')
+    .replace(/보대동(?=\s*\d)/g, '복대동')
+    .replace(/니동구(?=\s*부평동)/g, '부평구')
     .replace(/출라동(?=\s*\d)/g, '청라동')
     .replace(/[“”‘’"'`]/g, '')
     .replace(/\s*-\s*/g, '-')
-    .replace(/([가-힣][가-힣0-9]*(?:읍|면|동|리|가))(?=(?:산\s*)?\d)/g, '$1 ')
+    .replace(/([가-힣]{1,10}구)(?=[가-힣0-9]*(?:읍|면|동|리|가))/g, '$1 ')
+    .replace(/([가-힣][가-힣0-9]*(?:읍|면|동|리|가))(?=(?:산\s*)?\d(?!\d*가))/g, '$1 ')
     .replace(/([가-힣A-Za-z0-9.·ㆍ-]+(?:대로|번길|로|길|고속도로))(?=(?:지하\s*)?\d)/g, '$1 ')
+    .replace(/([가-힣]+동)(\d)\2가(?=\s*\d)/g, '$1$2가')
     .replace(/산\s*(?=\d)/g, '산 ')
     .replace(/산\s+(\d)\1(\d)\b/g, '산 $1-$2')
     .replace(/\s+/g, ' ')
@@ -1340,20 +1345,130 @@ function isLikelyAddress(line) {
   return looksLikePlaceName;
 }
 
-function extractInlineAddressCandidates(line) {
+function isStrictOcrAddress(line) {
+  const normalized = cleanOcrAddressLine(line);
+  if (!normalized || normalized.length > 70) return false;
+  if (!/^[가-힣]/.test(normalized)) return false;
+  if (/[A-Za-z]{2,}/.test(normalized)) return false;
+  if (/[~<>_=+*#@$%^\\[\\]{}]/.test(normalized)) return false;
+  if (!/^[가-힣0-9\s().,·ㆍ-]+$/.test(normalized)) return false;
+
+  const signal = getAddressSignal(normalized);
+  if (!signal.hasSpecific) return false;
+
+  const firstSigungu = normalized.match(new RegExp(`^(${OCR_SIGUNGU_SOURCE})\\s+${OCR_LEGAL_AREA_SOURCE}`));
+  if (!signal.hasSido && firstSigungu && firstSigungu[1].length > 4) return false;
+
+  const lot = getAddressLotSignature(normalized);
+  if (!signal.hasAdministrative && lot && lot.main.length < 2) return false;
+
+  return true;
+}
+
+function getAdminMatches(text) {
+  return Array.from(text.matchAll(new RegExp(OCR_ADMIN_TOKEN_SOURCE, 'g')))
+    .map(match => ({
+      text: match[0],
+      index: match.index ?? 0,
+      end: (match.index ?? 0) + match[0].length,
+      isSido: new RegExp(`^${OCR_SIDO_SOURCE}$`).test(match[0]),
+      isSigungu: new RegExp(`^${OCR_SIGUNGU_SOURCE}$`).test(match[0])
+    }));
+}
+
+function isCleanAddressGap(text) {
+  const gap = normalizeOcrText(text)
+    .replace(/^\s*(?:[①-⑳]|\d{1,2})[\).:：-]\s*/, '')
+    .trim();
+  return !gap || /^[\s,.;:：/()·ㆍ-]+$/.test(gap);
+}
+
+function getLegalAreaStem(line) {
+  const match = normalizeOcrText(line).match(new RegExp(OCR_LEGAL_AREA_SOURCE));
+  if (!match) return '';
+  return match[0].replace(/(?:읍|면|동|리|가)$/, '').slice(0, 2);
+}
+
+function getAdminStem(line) {
+  return normalizeOcrText(line).replace(/(?:시|군|구)$/, '').slice(0, 2);
+}
+
+function isLocalAdminForCore(admin, core) {
+  const adminStem = getAdminStem(admin);
+  const coreStem = getLegalAreaStem(core);
+  return !!adminStem && !!coreStem && adminStem === coreStem;
+}
+
+function getCleanAdminPrefixBefore(text, coreIndex, core) {
+  const start = Math.max(0, coreIndex - 44);
+  const before = text.slice(start, coreIndex);
+  const admins = getAdminMatches(before);
+  if (!admins.length) return '';
+
+  let chain = [];
+  const lastSidoIndex = admins.map((admin, i) => admin.isSido ? i : -1).filter(i => i >= 0).pop();
+  if (lastSidoIndex != null) {
+    chain = [admins[lastSidoIndex]];
+    for (let i = lastSidoIndex + 1; i < admins.length && chain.length < 3; i++) {
+      const gap = before.slice(chain[chain.length - 1].end, admins[i].index);
+      if (!isCleanAddressGap(gap)) break;
+      if (!admins[i].isSigungu) break;
+      chain.push(admins[i]);
+    }
+  } else {
+    const last = admins[admins.length - 1];
+    if (last.isSigungu && isLocalAdminForCore(last.text, core)) chain = [last];
+  }
+
+  if (!chain.length) return '';
+  const trailingGap = before.slice(chain[chain.length - 1].end);
+  if (!isCleanAddressGap(trailingGap)) return '';
+
+  const prefix = cleanOcrAddressLine(chain.map(admin => admin.text).join(' '));
+  return prefix.length <= 28 ? prefix : '';
+}
+
+function extractAddressCoreCandidates(line) {
   const normalized = cleanOcrAddressLine(line);
   if (!normalized) return [];
 
   const patterns = [
-    new RegExp(`${OCR_ADMIN_PREFIX_SOURCE}${OCR_LEGAL_AREA_SOURCE}\\s*${OCR_JIBUN_NUMBER_SOURCE}`, 'g'),
-    new RegExp(`${OCR_ADMIN_PREFIX_SOURCE}${OCR_ROAD_NAME_SOURCE}\\s*${OCR_ROAD_NUMBER_SOURCE}`, 'g')
+    new RegExp(`${OCR_LEGAL_AREA_SOURCE}\\s*${OCR_JIBUN_NUMBER_SOURCE}`, 'g'),
+    new RegExp(`${OCR_ROAD_NAME_SOURCE}\\s*${OCR_ROAD_NUMBER_SOURCE}`, 'g')
   ];
   const matches = [];
 
   patterns.forEach(pattern => {
     for (const match of normalized.matchAll(pattern)) {
+      const index = match.index ?? 0;
+      const core = cleanOcrAddressLine(match[0]);
+      const prefix = getCleanAdminPrefixBefore(normalized, index, core);
+      const address = cleanOcrAddressLine(prefix ? `${prefix} ${core}` : core);
+      if (!isStrictOcrAddress(address)) continue;
+      matches.push({ index, address });
+    }
+  });
+
+  return matches
+    .sort((a, b) => a.index - b.index || b.address.length - a.address.length)
+    .map(match => match.address);
+}
+
+function extractInlineAddressCandidates(line) {
+  const normalized = cleanOcrAddressLine(line);
+  if (!normalized) return [];
+
+  const coreCandidates = extractAddressCoreCandidates(normalized);
+  const patterns = [
+    new RegExp(`${OCR_ADMIN_PREFIX_SOURCE}${OCR_LEGAL_AREA_SOURCE}\\s*${OCR_JIBUN_NUMBER_SOURCE}`, 'g'),
+    new RegExp(`${OCR_ADMIN_PREFIX_SOURCE}${OCR_ROAD_NAME_SOURCE}\\s*${OCR_ROAD_NUMBER_SOURCE}`, 'g')
+  ];
+  const matches = coreCandidates.map((address, i) => ({ index: i, address }));
+
+  patterns.forEach(pattern => {
+    for (const match of normalized.matchAll(pattern)) {
       const candidate = cleanOcrAddressLine(match[0]);
-      if (!isLikelyAddress(candidate)) continue;
+      if (!isStrictOcrAddress(candidate)) continue;
       matches.push({ index: match.index ?? 0, address: candidate });
     }
   });
@@ -1426,7 +1541,7 @@ function isBetterAddressCandidate(next, current) {
   return next.length > current.length;
 }
 
-function dedupeAddressCandidates(candidates, limit = OCR_MAX_ADDRESSES) {
+function dedupeAddressCandidates(candidates, limit = OCR_MAX_ADDRESSES, strict = false) {
   const selected = [];
   const exactToIndex = new Map();
   const coreToIndex = new Map();
@@ -1434,7 +1549,7 @@ function dedupeAddressCandidates(candidates, limit = OCR_MAX_ADDRESSES) {
 
   candidates
     .map(cleanOcrAddressLine)
-    .filter(isLikelyAddress)
+    .filter(candidate => strict ? isStrictOcrAddress(candidate) : isLikelyAddress(candidate))
     .forEach(candidate => {
       const exactKey = getAddressExactKey(candidate);
       const coreKey = getAddressCoreKey(candidate);
@@ -1503,7 +1618,7 @@ function extractAddressCandidates(text) {
     }
   }
 
-  return dedupeAddressCandidates(candidates);
+  return dedupeAddressCandidates(candidates, OCR_MAX_ADDRESSES, true);
 }
 
 function renderOcrCandidates(candidates) {
