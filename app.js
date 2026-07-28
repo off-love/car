@@ -1823,11 +1823,6 @@ async function openAddressSearch(wpIdx) {
 
 function handlePostcodeResult(data, globalRegion) {
   const address = data.roadAddress || data.jibunAddress;
-  // 설정의 지역필터가 설정되어 있으면 중복 확인 스킵
-  if (globalRegion) {
-    geocodeAndSet(S.pendingWpIdx, address, data);
-    return;
-  }
 
   // Check for duplicate addresses across regions using Kakao Geocoder
   if (!window.kakao?.maps?.services) {
@@ -1845,6 +1840,19 @@ function handlePostcodeResult(data, globalRegion) {
       geocodeAndSet(S.pendingWpIdx, address, data, result?.[0]);
       return;
     }
+
+    // 기본 지역 필터가 설정되어 있으면, 해당 지역 결과를 우선 선택
+    if (globalRegion) {
+      const regionMatch = result.find(r =>
+        r.address.region_1depth_name.startsWith(globalRegion)
+      );
+      if (regionMatch) {
+        setWpFromGeoResult(S.pendingWpIdx, regionMatch);
+        return;
+      }
+      // 매칭 실패 시 아래 기존 로직(모달 표시)으로 폴백
+    }
+
     // Check distinct regions
     const regionSet = new Set(result.map(r => r.address.region_1depth_name + ' ' + r.address.region_2depth_name));
     if (regionSet.size <= 1) {
