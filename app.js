@@ -773,7 +773,7 @@ function renderWaypoints() {
         input.classList.add('geocoding');
         input.classList.remove('error');
         try {
-          const result = await geocodeByRest(val);
+          const result = await geocodeByRest(val, S.settings.defaultRegion);
           const latestWpIdx = getWaypointIndexById(wpId);
           if (latestWpIdx < 0 || S.waypoints[latestWpIdx].address !== val) return;
 
@@ -1748,7 +1748,7 @@ async function geocodeWaypointByIndex(i) {
 
   const address = wp.address;
   try {
-    const result = await geocodeByRest(address);
+    const result = await geocodeByRest(address, S.settings.defaultRegion);
     if (!S.waypoints[i] || S.waypoints[i].address !== address) return false;
 
     if (result) {
@@ -1831,9 +1831,15 @@ function handlePostcodeResult(data, globalRegion) {
   }
 
   const geocoder = new kakao.maps.services.Geocoder();
-  // Search with just dong+bunji (strip leading city)
-  const parts = data.jibunAddress.split(' ');
-  const shortQuery = parts.length >= 3 ? parts.slice(2).join(' ') : data.jibunAddress;
+  // 도로명에서 시/도, 시/군/구를 제거하여 도로명+건물번호만 추출
+  // 동일 도로명이 여러 지역에 존재하는 경우를 찾기 위함
+  let shortQuery;
+  if (data.roadAddress && data.sido && data.sigungu) {
+    shortQuery = data.roadAddress.replace(data.sido, '').replace(data.sigungu, '').trim();
+  } else {
+    const parts = (data.jibunAddress || '').split(' ');
+    shortQuery = parts.length >= 3 ? parts.slice(2).join(' ') : (data.jibunAddress || data.roadAddress);
+  }
 
   geocoder.addressSearch(shortQuery, (result, status) => {
     if (status !== kakao.maps.services.Status.OK || result.length <= 1) {
@@ -2338,7 +2344,7 @@ function updateFixedStops() {
   }
 }
 
-async function geocodeByRest(address) {
+async function geocodeByRest(address, preferRegion) {
   const restKey = S.settings.restKey || KAKAO_REST_KEY;
   if (!restKey) return null;
 
@@ -2349,7 +2355,17 @@ async function geocodeByRest(address) {
       { headers: { Authorization: `KakaoAK ${restKey}` } }
     );
     const json = await resp.json();
-    if (json.documents?.[0]) return { x: json.documents[0].x, y: json.documents[0].y };
+    if (json.documents?.length) {
+      // 기본 지역 필터가 설정되어 있으면 해당 지역 결과 우선 선택
+      if (preferRegion && json.documents.length > 1) {
+        const match = json.documents.find(d => {
+          const r1 = d.address?.region_1depth_name || d.road_address?.region_1depth_name || '';
+          return r1.startsWith(preferRegion);
+        });
+        if (match) return { x: match.x, y: match.y };
+      }
+      return { x: json.documents[0].x, y: json.documents[0].y };
+    }
   } catch (e) { console.error('Address geocoding failed:', e); }
 
   // 2순위: 검색결과가 없다면 장소명(키워드)으로 검색 (keyword.json)
@@ -2359,7 +2375,16 @@ async function geocodeByRest(address) {
       { headers: { Authorization: `KakaoAK ${restKey}` } }
     );
     const json2 = await resp2.json();
-    if (json2.documents?.[0]) return { x: json2.documents[0].x, y: json2.documents[0].y };
+    if (json2.documents?.length) {
+      // keyword.json 응답에서도 지역 우선 선택
+      if (preferRegion && json2.documents.length > 1) {
+        const match = json2.documents.find(d =>
+          (d.address_name || '').startsWith(preferRegion)
+        );
+        if (match) return { x: match.x, y: match.y };
+      }
+      return { x: json2.documents[0].x, y: json2.documents[0].y };
+    }
   } catch (e) { console.error('Keyword geocoding failed:', e); }
 
   return null;
