@@ -511,6 +511,12 @@ function initMap() {
   container.innerHTML = ''; // 기존 지도 초기화
   const opts = { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 7 };
   S.mapInst = new kakao.maps.Map(container, opts);
+
+  // 일반/스카이뷰 전환 컨트롤
+  S.mapInst.addControl(new kakao.maps.MapTypeControl(), kakao.maps.ControlPosition.TOPRIGHT);
+  // 줌 컨트롤
+  S.mapInst.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+
   S.markers = []; S.polylines = [];
   document.getElementById('map-placeholder').style.display = 'none';
 }
