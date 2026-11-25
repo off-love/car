@@ -2338,3 +2338,6 @@ table td {
 .btn-save-route:active {
   transform: scale(.97);
 }
+
+.toll-info { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: #fff7e6; border: 1px solid #ffd591; font-size: 13px; line-height: 1.5; color: #614700; }
+.toll-info span { font-size: 12px; color: #8c6d1f; }

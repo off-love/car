@@ -2056,8 +2056,9 @@ async function calcRoute() {
   document.getElementById('btn-calc').disabled = true;
 
   try {
-    const { segments, routeCoords } = await callDirectionsAPI(allPoints);
+    const { segments, routeCoords, tollInfo } = await callDirectionsAPI(allPoints);
     S.segments = segments;
+    S.tollInfo = tollInfo || { toll: 0, roads: [] };
     S.totalDist = segments.reduce((s, seg) => s + seg.distance, 0);
     renderResults();
     renderMapRoute(allPoints, routeCoords);
@@ -2080,10 +2081,11 @@ async function callDirectionsAPI(points) {
 
   let allSegments = [];
   let allRouteCoords = [];
+  const allRoutes = [];
 
   if (waypoints.length <= MAX_WP) {
     const res = await fetchDirections(origin, dest, waypoints, restKey);
-    return { segments: buildSegments(points, res), routeCoords: extractCoords(res) };
+    return { segments: buildSegments(points, res), routeCoords: extractCoords(res), tollInfo: extractToll([res]) };
   }
 
   // Split into chunks
@@ -2103,11 +2105,25 @@ async function callDirectionsAPI(points) {
     const res = await fetchDirections(cur, chunkDest, chunkWps, restKey);
     allSegments.push(...buildSegments(chunkAllPts, res));
     allRouteCoords.push(...extractCoords(res));
+    allRoutes.push(res);
     cur = chunkDest;
   }
   segPoints.push(dest);
 
-  return { segments: allSegments, routeCoords: allRouteCoords };
+  return { segments: allSegments, routeCoords: allRouteCoords, tollInfo: extractToll(allRoutes) };
+}
+
+// 통행료(원) 합계 및 경유 고속도로/유료도로 이름 추출
+function extractToll(routes) {
+  let toll = 0;
+  const names = new Set();
+  routes.forEach(route => {
+    toll += Number(route.summary?.fare?.toll) || 0;
+    route.sections?.forEach(sec => sec.roads?.forEach(road => {
+      if (road.name && /고속도로|고속화도로|유료|자동차전용/.test(road.name)) names.add(road.name);
+    }));
+  });
+  return { toll, roads: [...names] };
 }
 
 async function fetchDirections(origin, dest, waypoints, restKey) {
@@ -2188,6 +2204,18 @@ function renderResults() {
   if (foot) foot.textContent = totalText;
   const footDur = document.getElementById('total-dur-foot');
   if (footDur) footDur.textContent = formatDuration(totalDuration);
+
+  const tollEl = document.getElementById('toll-info');
+  if (tollEl) {
+    const t = S.tollInfo || { toll: 0, roads: [] };
+    if (t.toll > 0 || t.roads.length) {
+      tollEl.innerHTML = `<strong>통행료 ${t.toll.toLocaleString('ko-KR')}원</strong>` +
+        (t.roads.length ? `<br><span>경유: ${t.roads.join(', ')}</span>` : '');
+    } else {
+      tollEl.textContent = '고속도로·유료도로 경유 없음 (통행료 0원)';
+    }
+    tollEl.style.display = 'block';
+  }
 
   document.getElementById('results-placeholder').style.display = 'none';
   document.getElementById('results-card').style.display = 'block';
